@@ -1,0 +1,9 @@
+sensing/firmware/.pio/
+sensing/firmware/sdkconfig.tx
+sensing/firmware/sdkconfig.rx
+sensing/firmware/sdkconfig.rx_both
+__pycache__/
+.pytest_cache/
+*.log
+sensing/host/models/
+sensing/host/data/

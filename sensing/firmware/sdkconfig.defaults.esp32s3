@@ -1,0 +1,3 @@
+# ESP32-S3: print over its built-in USB port (/dev/cu.usbmodem*). It is
+# full-speed USB, so the baud rate the laptop asks for doesn't matter.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y

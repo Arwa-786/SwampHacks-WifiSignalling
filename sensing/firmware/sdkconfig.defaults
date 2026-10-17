@@ -1,0 +1,15 @@
+# Shared by both roles. The chip (esp32 / esp32s3) comes from `board` in
+# platformio.ini.
+
+# CSI is compiled out of the Wi-Fi driver unless this is set.
+CONFIG_ESP_WIFI_CSI_ENABLED=y
+
+# 1 ms ticks so the sender can pace packets every 10 ms accurately.
+CONFIG_FREERTOS_HZ=1000
+
+# Console (where CSI lines are printed) is set per chip in
+# sdkconfig.defaults.esp32 and sdkconfig.defaults.esp32s3, which ESP-IDF loads
+# automatically on top of this file.
+
+# Wi-Fi driver logs would interleave with CSI lines; keep only warnings.
+CONFIG_LOG_DEFAULT_LEVEL_WARN=y
