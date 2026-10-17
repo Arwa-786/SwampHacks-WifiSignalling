@@ -204,6 +204,23 @@ Note: the big results used special radios / multi-antenna routers, not ESP32s.
 - Spoken cues: "Room scanned. Next player, go in." sounds bad; rewrite the lines and pick a
   better voice (macOS `say -v` premium voices, or a TTS service).
 - Possibly: elimination needs MOVING for ~0.75 s in a row during red (fewer twitch/glitch catches).
+- More hidden players: **team mode** (2-3 people in one spot; anyone moves on red -> whole team out)
+  and a **player queue** (next judge's name queued, rounds back to back with auto-scan between).
+- **Zone mode (only if the zone test passes):** one hiding place next to each RX (RX ~2 m apart),
+  each player judged by "their" board. Test first: move in one zone at a time; the zone's own
+  board must react >= 2x the others every time. Fail -> team mode only. If it passes, camera
+  labels per zone train a model that separates zones.
+
+## Experiments still to run (need the boards)
+- Paced breathing (`record_breathing.py`, then `eval_breathing.py`): true vs Wi-Fi rate + empty-room
+  control. Breathing rate is signal processing (FFT); train a "breathing yes/no" model only if
+  the empty-room control shows too many false detections.
+- More game sessions for `evaluate.py`: sitting/crouching, ~2 m away, a second person.
+- Curtain test (hidden under the tablecloth) and through-wall test, labelled by a spoken
+  freeze/move script instead of the camera (the camera can't see behind the curtain).
+- Zone test (see polish list).
+- Optional: receivers listening to a normal router (own hotspot/travel router, never the venue's)
+  for the "uses the building's existing Wi-Fi" pitch.
 
 ## Build order
 1. Before event: flash esp-csi to 2 ESP32s, stream CSI to laptop, see motion; run go/no-go test.
