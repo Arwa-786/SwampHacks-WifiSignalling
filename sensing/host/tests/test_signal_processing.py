@@ -161,3 +161,35 @@ def test_breathing_rate_found(bpm):
 def test_no_breathing_gives_low_confidence(seed):
     t, amps = fake(30, profile=PERSON, seed=100 + seed)
     assert estimate_rate(t, amps).confidence < MIN_CONFIDENCE
+
+
+def test_fuse_needs_half_the_receivers_for_moving():
+    from multi_rx import fuse
+
+    assert fuse([MOVING, EMPTY, EMPTY]) == STILL  # one glitchy link is outvoted
+    assert fuse([MOVING, MOVING, EMPTY]) == MOVING
+    assert fuse([MOVING, EMPTY]) == MOVING
+    assert fuse([EMPTY, EMPTY, EMPTY]) == EMPTY
+    assert fuse([STILL, EMPTY, EMPTY]) == STILL
+    assert fuse([]) == EMPTY
+
+
+def test_room_scan_survives_a_restart(tmp_path):
+    from features import Baseline
+    from multi_rx import MultiReceiver
+    from signal_processing import Calibration, LiveDetector
+
+    path = str(tmp_path / "scan.json")
+    a = MultiReceiver(["/dev/fake0"], scan_path=path)
+    rx = a.receivers[0]
+    rx.mac = "aa:bb:cc:dd:ee:ff"
+    rx.detector = LiveDetector(Calibration(np.ones(4), 0.5, 0.2, 0.1), 50, 10, 3)
+    rx.ml.baseline = Baseline(np.ones(4), -60.0, np.arange(8.0))
+    a.scan_time = 123.0
+    a._save()
+
+    b = MultiReceiver(["/dev/fake0"], scan_path=path)  # "restart"
+    rx2 = b.receivers[0]
+    MultiReceiver._restore(rx2, b._saved["aa:bb:cc:dd:ee:ff"])
+    assert rx2.detector.cal.motion_threshold == 0.5
+    assert rx2.ml.baseline.rssi == -60.0 and b.scan_time == 123.0
