@@ -120,6 +120,8 @@ def main() -> None:
     parser.add_argument("--still", type=float, default=0.04, help="body-heights/s counted as still")
     parser.add_argument("--no-preview", action="store_true")
     parser.add_argument("--guide", action="store_true", help="speak a varied script out loud")
+    parser.add_argument("--person", default="unknown", help="who is in the hiding spot (for evaluate.py)")
+    parser.add_argument("--position", default="unknown", help='e.g. "sitting 1m" (for evaluate.py)')
     args = parser.parse_args()
 
     from multi_rx import find_rx_ports
@@ -248,7 +250,8 @@ def main() -> None:
         out = args.output if len(ports) == 1 else f"{base}_rx{mac.replace(':', '')[-4:] or os.path.basename(port)}{ext}"
         with open(out, "w") as f:
             f.write(f"# record_labeled {time.strftime('%Y-%m-%d %H:%M:%S')} moving>={args.moving} "
-                    f"still<={args.still} port={port} mac={mac}\n")
+                    f"still<={args.still} port={port} mac={mac} "
+                    f"person={args.person.replace(' ', '_')} position={args.position.replace(' ', '_')}\n")
             f.write("\n".join(rows[port]) + "\n")
         print(f"saved {len(rows[port])} labelled CSI lines to {out}")
     if not any(rows.values()):

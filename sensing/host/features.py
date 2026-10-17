@@ -215,6 +215,12 @@ FUSE_TOLERANCE_S = 0.15
 
 
 def fused_dataset(paths: list[str]) -> tuple[np.ndarray, np.ndarray]:
+    """See fused_dataset_with_times; without the times."""
+    _, x, y = fused_dataset_with_times(paths)
+    return x, y
+
+
+def fused_dataset_with_times(paths: list[str]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """One session recorded on several boards at once (record_labeled.py writes
     one file per board, all timed by the same laptop clock) -> one row per
     moment with every board's features side by side, board order = paths order.
@@ -224,7 +230,7 @@ def fused_dataset(paths: list[str]) -> tuple[np.ndarray, np.ndarray]:
     """
     per = [session_windows(p) for p in paths]
     ref_t, ref_x, ref_lab = per[0]
-    rows, ys = [], []
+    rows, ys, ts = [], [], []
     for k, t in enumerate(ref_t):
         lab = ref_lab[k]
         if lab not in LABEL_TO_CLASS:
@@ -240,4 +246,6 @@ def fused_dataset(paths: list[str]) -> tuple[np.ndarray, np.ndarray]:
         else:
             rows.append(np.concatenate(parts))
             ys.append(CLASSES.index(LABEL_TO_CLASS[lab]))
-    return np.array(rows).reshape(-1, len(FEATURE_NAMES) * len(paths)), np.array(ys, dtype=int)
+            ts.append(t)
+    x = np.array(rows).reshape(-1, len(FEATURE_NAMES) * len(paths))
+    return np.array(ts), x, np.array(ys, dtype=int)
