@@ -66,7 +66,7 @@ def main() -> None:
         print("  - Both boards must run the same CSI_CHANNEL (csi_main.c).")
         print("  - Move them within 1-2 m with nothing metal between them.")
         if junk:
-            print("  - Garbled text usually means wrong baud rate; the firmware uses 921600.")
+            print("  - Garbled text usually means wrong baud rate; classic ESP32 boards use 460800 (the S3 ignores baud).")
         return
 
     duration = frames[-1].host_time - frames[0].host_time

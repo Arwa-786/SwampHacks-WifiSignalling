@@ -12,7 +12,9 @@ from typing import Iterator
 
 import numpy as np
 
-BAUD = 921600
+# Classic ESP32 boards (CH340/CP2102 USB chip) print at 460800; the ESP32-S3's
+# built-in USB ignores the baud rate.
+BAUD = 460800
 
 # The ESP32 / ESP32-S3 LLTF buffer holds 64 subcarriers in FFT order:
 # index 0..31 = subcarriers 0..+31, index 32..63 = subcarriers -32..-1.

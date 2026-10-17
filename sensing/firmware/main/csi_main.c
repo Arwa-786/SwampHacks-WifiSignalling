@@ -12,7 +12,7 @@
  * fixed, and we control the packet rate. Same approach as espressif/esp-csi
  * "get-started" examples.
  *
- * Serial output (921600 baud), one line each:
+ * Serial output (460800 baud on classic ESP32; native USB on ESP32-S3), one line each:
  *   BOOT,<role>,<mac>,<channel>          once at startup
  *   CSI,<seq>,<rssi>,<noise>,<ts_us>,<len>,<hex>
  *       seq    802.11 sequence number (gaps = lost packets)
@@ -23,7 +23,8 @@
  *       hex    CSI bytes as hex, 2 chars per byte. Bytes come in pairs
  *              (imaginary, real) per subcarrier, each a signed int8.
  *              Hex instead of decimal keeps the line short enough for 100 Hz.
- *   STAT,<role>,<packets_last_second>,<dropped_last_second>   once per second
+ *   STAT,<role>,<packets_last_second>,<dropped_last_second>,<mac>   once per second
+ *       mac identifies the board even when its serial port name changes
  */
 
 #include <inttypes.h>
@@ -227,9 +228,11 @@ void app_main(void)
     start_role();
 
     const char *role = CSI_ROLE_TX ? "TX" : "RX";
+    uint8_t mac[6];
+    esp_wifi_get_mac(WIFI_IF_STA, mac);
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(1000));
-        printf("STAT,%s,%" PRIu32 ",%" PRIu32 "\n", role, s_packets, s_dropped);
+        printf("STAT,%s,%" PRIu32 ",%" PRIu32 "," MACSTR "\n", role, s_packets, s_dropped, MAC2STR(mac));
         fflush(stdout);
         s_packets = 0;
         s_dropped = 0;

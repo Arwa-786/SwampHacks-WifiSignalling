@@ -1,4 +1,5 @@
 # Classic ESP32 (ESP-WROOM-32): output goes through the board's USB-UART chip.
 # CSI lines are ~300 chars at 100 Hz (~30 KB/s); 115200 baud (~11 KB/s) is too slow.
+# 921600 came out garbled through a CH340 chip on macOS; 460800 (~46 KB/s) is enough.
 CONFIG_ESP_CONSOLE_UART_CUSTOM=y
-CONFIG_ESP_CONSOLE_UART_BAUDRATE=921600
+CONFIG_ESP_CONSOLE_UART_BAUDRATE=460800

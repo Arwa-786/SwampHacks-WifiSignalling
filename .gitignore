@@ -7,3 +7,8 @@ __pycache__/
 *.log
 sensing/host/models/
 sensing/host/data/
+.env
+*.env
+server/room_scan.json
+server/layout.json
+sensing/firmware/sdkconfig.rx_esp32
