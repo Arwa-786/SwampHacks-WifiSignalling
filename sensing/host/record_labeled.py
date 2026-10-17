@@ -1,7 +1,12 @@
 """Record Wi-Fi CSI with labels from the webcam ("the camera teaches the Wi-Fi").
 
     conda activate wifind            # Python 3.12 env with mediapipe + opencv
-    python record_labeled.py data/session_01.log --minutes 3
+    python record_labeled.py data/session_01.log --minutes 3 --guide
+
+With several RX boards plugged in, all of them are recorded at once, one log
+per board (data/session_01_rx<mac>.log), all labelled by the same camera.
+--guide speaks a varied 3-minute script (leave, freeze, move, sit...) so the
+person in the hiding spot never has to look at the screen.
 
 While the RX board streams CSI, the laptop webcam watches the hiding spot and
 Google's MediaPipe Pose model tracks 33 body points. Every camera frame becomes
@@ -31,6 +36,24 @@ from collections import deque
 import numpy as np
 
 from csi_io import iter_lines
+
+# Spoken script for --guide: (seconds from start, what to say). The camera does
+# the labelling; the script just makes sure every kind of moment gets recorded.
+GUIDE = [
+    (0, "Leave the camera view and stay away from the boards."),
+    (20, "Come back to your spot and freeze."),
+    (35, "Move."),
+    (45, "Freeze."),
+    (60, "Move slowly."),
+    (72, "Freeze."),
+    (87, "Sit or crouch, then freeze."),
+    (102, "Move a lot."),
+    (112, "Freeze."),
+    (127, "Walk out of view."),
+    (140, "Walk back in and freeze."),
+    (155, "Small movements. Turn your head, move one hand."),
+    (167, "Freeze."),
+]
 
 MODEL_URL = (
     "https://storage.googleapis.com/mediapipe-models/pose_landmarker/"
@@ -90,13 +113,21 @@ class MotionLabeler:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("output")
-    parser.add_argument("--port", help="RX board serial port (default: auto-detect)")
+    parser.add_argument("--ports", nargs="*", help="RX board serial ports (default: every board streaming CSI)")
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--minutes", type=float, default=3)
     parser.add_argument("--moving", type=float, default=0.15, help="body-heights/s counted as moving")
     parser.add_argument("--still", type=float, default=0.04, help="body-heights/s counted as still")
     parser.add_argument("--no-preview", action="store_true")
+    parser.add_argument("--guide", action="store_true", help="speak a varied script out loud")
     args = parser.parse_args()
+
+    from multi_rx import find_rx_ports
+
+    ports = args.ports or find_rx_ports()
+    if not ports:
+        raise SystemExit("No RX boards streaming CSI. Is the WiFind server still running? Stop it first.")
+    print(f"Recording {len(ports)} receiver(s): {ports}")
 
     import cv2
     import mediapipe as mp
@@ -119,31 +150,64 @@ def main() -> None:
 
     # Camera labels as (time, label); the serial thread looks up the latest.
     labels: deque[tuple[float, str]] = deque(maxlen=1000)
-    rows: list[str] = []
-    counts: dict[str, int] = {}
+    rows: dict[str, list[str]] = {p: [] for p in ports}
+    macs: dict[str, str] = {}
+    counts: dict[str, int] = {}  # labels of the first board's lines (same camera for all)
     stop = threading.Event()
     lock = threading.Lock()
 
-    def read_serial():
-        for t, line in iter_lines(args.port):
+    def read_serial(port: str):
+        # a bumped board drops its USB connection; keep retrying instead of
+        # silently losing that receiver for the rest of the session
+        while not stop.is_set():
+            try:
+                read_port(port)
+            except Exception as e:
+                print(f"[{port}] lost connection ({e.__class__.__name__}); retrying", flush=True)
+                time.sleep(1.0)
+
+    def read_port(port: str):
+        for t, line in iter_lines(port):
             if stop.is_set():
                 return
+            if line.startswith("STAT,") and port not in macs:
+                parts = line.strip().split(",")
+                if len(parts) > 4:
+                    macs[port] = parts[4]
             if not line.startswith("CSI,"):
                 continue
             with lock:
                 label = labels[-1][1] if labels and t - labels[-1][0] <= STALE_LABEL_S else "unsure"
-            rows.append(f"{t:.4f}\t{line.rstrip()}\t{label}")
-            counts[label] = counts.get(label, 0) + 1
+            rows[port].append(f"{t:.4f}\t{line.rstrip()}\t{label}")
+            if port == ports[0]:
+                counts[label] = counts.get(label, 0) + 1
 
-    reader = threading.Thread(target=read_serial, daemon=True)
-    reader.start()
+    readers = [threading.Thread(target=read_serial, args=(p,), daemon=True) for p in ports]
+    for r in readers:
+        r.start()
+
+    def guide():
+        import subprocess
+
+        t0 = time.monotonic()
+        for at, text in GUIDE:
+            if at > args.minutes * 60:
+                break
+            while time.monotonic() - t0 < at:
+                if stop.is_set():
+                    return
+                time.sleep(0.1)
+            subprocess.Popen(["say", text])
+
+    if args.guide:
+        threading.Thread(target=guide, daemon=True).start()
 
     labeler = MotionLabeler(args.moving, args.still)
     colors = {"moving": (0, 0, 255), "still": (0, 200, 255), "empty": (200, 200, 200), "unsure": (128, 128, 128)}
     start = time.monotonic()
     print(f"Recording for {args.minutes:g} min. Press q in the preview window to stop.")
     try:
-        while time.monotonic() - start < args.minutes * 60 and reader.is_alive():
+        while time.monotonic() - start < args.minutes * 60 and any(r.is_alive() for r in readers):
             ok, frame = cam.read()
             if not ok:
                 continue
@@ -160,7 +224,7 @@ def main() -> None:
                     cv2.circle(frame, (int(lm.x * w), int(lm.y * h)), 3, colors[label], -1)
                 cv2.putText(frame, f"{label.upper()}  speed {speed:.2f}", (10, 30),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.9, colors[label], 2)
-                cv2.putText(frame, f"CSI lines {len(rows)}  left {args.minutes * 60 - (t - start):.0f}s", (10, 60),
+                cv2.putText(frame, f"CSI lines {sum(map(len, rows.values()))}  left {args.minutes * 60 - (t - start):.0f}s", (10, 60),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
                 cv2.imshow("WiFind teacher (q to stop)", frame)
                 if cv2.waitKey(1) & 0xFF == ord("q"):
@@ -170,13 +234,26 @@ def main() -> None:
         cam.release()
         cv2.destroyAllWindows()
 
-    if not rows:
-        raise SystemExit("No CSI received. Is the RX board plugged in? Run check_link.py.")
+    if args.guide:
+        import subprocess
+
+        subprocess.Popen(["say", "Recording done. Thank you."])
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
-    with open(args.output, "w") as f:
-        f.write(f"# record_labeled {time.strftime('%Y-%m-%d %H:%M:%S')} moving>={args.moving} still<={args.still}\n")
-        f.write("\n".join(rows) + "\n")
-    print(f"saved {len(rows)} labelled CSI lines to {args.output}: {counts}")
+    base, ext = os.path.splitext(args.output)
+    for port in ports:
+        if not rows[port]:
+            print(f"Warning: no CSI from {port}; nothing saved for it.")
+            continue
+        mac = macs.get(port, "")
+        out = args.output if len(ports) == 1 else f"{base}_rx{mac.replace(':', '')[-4:] or os.path.basename(port)}{ext}"
+        with open(out, "w") as f:
+            f.write(f"# record_labeled {time.strftime('%Y-%m-%d %H:%M:%S')} moving>={args.moving} "
+                    f"still<={args.still} port={port} mac={mac}\n")
+            f.write("\n".join(rows[port]) + "\n")
+        print(f"saved {len(rows[port])} labelled CSI lines to {out}")
+    if not any(rows.values()):
+        raise SystemExit("No CSI received. Are the RX boards plugged in? Run check_link.py.")
+    print(f"labels: {counts}")
     if counts.get("empty", 0) < 500:
         print("Warning: little EMPTY data; training needs some (leave the camera view for 10+ s).")
 

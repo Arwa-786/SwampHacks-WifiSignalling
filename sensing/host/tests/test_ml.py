@@ -81,3 +81,29 @@ def test_camera_labeler_empty_still_moving():
     moving = [lab.update(1 + i / 30, pose(0.01 * i))[0] for i in range(30)]  # 0.3 image-widths/s
     assert moving[-1] == "moving"
     assert lab.update(2.0, [FakeLandmark(0.5, 0.5, visibility=0.1)] * 33)[0] == "unsure"
+
+
+def test_group_boards_lines_up_feature_blocks(tmp_path):
+    from train_model import group_boards
+
+    files = [str(tmp_path / f"s{i}_rx{b}.log") for i in (1, 2) for b in ("fb28", "64dc")]
+    groups = group_boards(files)
+    assert [name.endswith(("s1", "s2")) for name, _ in groups] == [True, True]
+    assert all(f[0].endswith("_rx64dc.log") and f[1].endswith("_rxfb28.log") for _, f in groups)
+
+
+def test_hybrid_uses_presence_rule_when_model_says_not_moving():
+    from features import CLASSES, FEATURE_NAMES
+    from train_model import PRESENCE_RATIO, hybrid_predict
+
+    class NeverMoving:
+        def predict_proba(self, x):
+            p = np.zeros((len(x), 3))
+            p[:, CLASSES.index("EMPTY")] = 1
+            return p
+
+    n, P = len(FEATURE_NAMES), FEATURE_NAMES.index("presence")
+    x = np.ones((2, 3 * n))
+    x[0, [P, n + P]] = PRESENCE_RATIO + 1  # 2 of 3 boards see a person
+    x[1, P] = PRESENCE_RATIO + 1  # only 1 of 3: not enough
+    assert [CLASSES[i] for i in hybrid_predict(NeverMoving(), x)] == ["STILL", "EMPTY"]
