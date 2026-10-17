@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WiFind</title>
+<style>
+  :root {
+    --bg: #0b0f14; --panel: #121821; --panel-2: #18202b; --line: #243042;
+    --text: #e6edf3; --muted: #8b98a8;
+    --green: #2fd27a; --red: #ff4d5e; --amber: #ffb547; --blue: #4aa8ff;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.4 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    display: flex; align-items: center; gap: 16px; padding: 14px 20px;
+    border-bottom: 1px solid var(--line); flex-wrap: wrap;
+  }
+  .logo { font-weight: 800; font-size: 20px; letter-spacing: .5px; }
+  .logo span { color: var(--blue); }
+  .verdict {
+    margin-left: auto; padding: 8px 18px; border-radius: 999px; font-weight: 800;
+    font-size: 18px; letter-spacing: 1px; background: var(--panel-2); border: 1px solid var(--line);
+    min-width: 130px; text-align: center; transition: background .2s, color .2s;
+  }
+  .verdict.MOVING { background: var(--red); color: #fff; border-color: var(--red); }
+  .verdict.STILL { background: var(--amber); color: #111; border-color: var(--amber); }
+  button {
+    font: inherit; font-weight: 700; border: 0; border-radius: 10px; padding: 10px 16px;
+    cursor: pointer; background: var(--blue); color: #fff;
+  }
+  button.secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); }
+  button.danger { background: var(--red); }
+  button:disabled { opacity: .45; cursor: default; }
+  .status { color: var(--muted); font-size: 13px; }
+  main {
+    display: grid; gap: 16px; padding: 16px 20px;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+  .panel h2 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); }
+  #map { width: 100%; aspect-ratio: 4 / 3; display: block; border-radius: 10px; background: var(--panel-2); touch-action: none; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  /* game */
+  .light {
+    height: 120px; border-radius: 12px; display: grid; place-items: center;
+    font-size: 34px; font-weight: 900; letter-spacing: 2px; background: var(--panel-2);
+    transition: background .25s;
+  }
+  .light.GREEN { background: var(--green); color: #062; }
+  .light.RED { background: var(--red); color: #fff; }
+  .light.OUT { background: #3a1016; color: var(--red); }
+  .light.WON { background: #0d3320; color: var(--green); }
+  .bar { height: 14px; background: var(--panel-2); border-radius: 999px; overflow: hidden; margin: 12px 0 4px; }
+  .bar > div { height: 100%; width: 0; background: var(--green); transition: width .15s; }
+  .row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .row input {
+    flex: 1; min-width: 120px; font: inherit; padding: 10px 12px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+  }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+  .stat { background: var(--panel-2); border-radius: 10px; padding: 8px 10px; }
+  .stat b { display: block; font-size: 20px; }
+  .stat small { color: var(--muted); }
+  #events { margin: 12px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: 13px; }
+  #events li { padding: 4px 0; border-bottom: 1px solid var(--line); }
+  /* receivers */
+  .receivers { grid-column: 1 / -1; display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .rx-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .chip { margin-left: auto; font-size: 12px; font-weight: 800; padding: 3px 10px; border-radius: 999px; background: var(--panel-2); }
+  .chip.MOVING { background: var(--red); }
+  .chip.STILL { background: var(--amber); color: #111; }
+  .chip.DEAD { background: #333; color: var(--muted); }
+  .rx canvas { width: 100%; height: 170px; display: block; border-radius: 8px; image-rendering: pixelated; background: #000; }
+  .meter { position: relative; height: 8px; background: var(--panel-2); border-radius: 999px; margin-top: 10px; overflow: hidden; }
+  .meter > div { height: 100%; width: 0; background: var(--blue); transition: width .1s; }
+  .meter::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--text); opacity: .6; }
+  .rx-meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 6px; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; padding: 12px 16px; } header { padding: 12px 16px; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Wi<span>Find</span></div>
+  <button id="scan" class="secondary">Scan the room</button>
+  <span id="status" class="status">Connecting…</span>
+  <div id="verdict" class="verdict">—</div>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Room · where the Wi-Fi sees movement</h2>
+    <canvas id="map" width="800" height="600"></canvas>
+    <div class="hint">Drag the boards to where they really are. Glowing lines = disturbed links; the heat shows roughly where.</div>
+  </section>
+
+  <section class="panel">
+    <h2>Red Light, Green Light</h2>
+    <div id="light" class="light">READY</div>
+    <div class="bar"><div id="progress"></div></div>
+    <div class="status" id="phase-left">Scan the room, then start a round.</div>
+    <div class="row">
+      <input id="player" maxlength="20" placeholder="Nickname" autocomplete="off">
+      <button id="start">Start</button>
+      <button id="red" class="danger">Red light!</button>
+    </div>
+    <div class="stats">
+      <div class="stat"><b id="survival">0.0s</b><small>survived</small></div>
+      <div class="stat"><b id="stillness">—</b><small>stillness on red</small></div>
+      <div class="stat"><b id="sensed">—</b><small>Wi-Fi says</small></div>
+    </div>
+    <ul id="events"></ul>
+  </section>
+
+  <section class="receivers" id="receivers"></section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const api = (path, opts) => fetch(path, opts).then((r) => r.json());
+const post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+
+// ---------------------------------------------------------------- colormap
+// Dark blue -> purple -> orange -> pale yellow, for normalized amplitude 0.4..1.6.
+const STOPS = [[0, [8, 10, 40]], [0.35, [80, 30, 140]], [0.65, [230, 90, 60]], [1, [255, 240, 170]]];
+function colorFor(v) {
+  const x = Math.min(1, Math.max(0, (v - 0.4) / 1.2));
+  for (let i = 1; i < STOPS.length; i++) {
+    if (x <= STOPS[i][0]) {
+      const [x0, c0] = STOPS[i - 1], [x1, c1] = STOPS[i];
+      const f = (x - x0) / (x1 - x0);
+      return c0.map((c, k) => Math.round(c + f * (c1[k] - c)));
+    }
+  }
+  return STOPS[STOPS.length - 1][1];
+}
+
+// ------------------------------------------------------------- receivers
+const rxViews = []; // {root, canvas, ctx, ...}
+function ensureReceiverViews(receivers) {
+  const box = $("receivers");
+  while (rxViews.length < receivers.length) {
+    const i = rxViews.length;
+    const root = document.createElement("div");
+    root.className = "panel rx";
+    root.innerHTML = `
+      <div class="rx-head"><h2 style="margin:0">Receiver ${i + 1}</h2><span class="status mac"></span><span class="chip">—</span></div>
+      <canvas width="51" height="200"></canvas>
+      <div class="meter"><div></div></div>
+      <div class="rx-meta"><span class="rssi"></span><span class="smooth"></span><span class="pps"></span></div>`;
+    box.appendChild(root);
+    const canvas = root.querySelector("canvas");
+    rxViews.push({ root, canvas, ctx: canvas.getContext("2d") });
+  }
+}
+
+function drawWaterfall(view, rows) {
+  if (!rows.length) return;
+  const { ctx, canvas } = view;
+  const n = rows.length, w = canvas.width, h = canvas.height;
+  ctx.drawImage(canvas, 0, n, w, h - n, 0, 0, w, h - n); // scroll up
+  const img = ctx.createImageData(w, n);
+  rows.forEach((row, r) => row.forEach((v, c) => {
+    const [R, G, B] = colorFor(v), p = (r * w + c) * 4;
+    img.data[p] = R; img.data[p + 1] = G; img.data[p + 2] = B; img.data[p + 3] = 255;
+  }));
+  ctx.putImageData(img, 0, h - n);
+}
+
+function updateReceiver(view, r, i) {
+  const q = (s) => view.root.querySelector(s);
+  const label = r.alive ? r.state : "DEAD";
+  q(".chip").textContent = r.alive ? r.state : "NO DATA";
+  q(".chip").className = "chip " + label;
+  q(".mac").textContent = r.mac ? r.mac.slice(-5) : r.port;
+  const ratio = r.motion_threshold ? r.motion / r.motion_threshold : 0;
+  q(".meter > div").style.width = Math.min(100, ratio * 50) + "%"; // threshold sits at the middle line
+  q(".meter > div").style.background = ratio > 1 ? "var(--red)" : "var(--blue)";
+  q(".rssi").textContent = `${r.rssi} dBm`;
+  q(".smooth").textContent = `smooth ${r.smoothness.toFixed(2)}`;
+  q(".pps").textContent = `${Math.round(r.packets_per_s)} pkt/s`;
+  drawWaterfall(view, r.waterfall);
+}
+
+// ------------------------------------------------------------------- map
+let layout = null, lastReceivers = [];
+const map = $("map"), mctx = map.getContext("2d");
+const toPx = (p) => [p.x / layout.room.w * map.width, p.y / layout.room.h * map.height];
+const toM = (x, y) => ({ x: +(x / map.width * layout.room.w).toFixed(2), y: +(y / map.height * layout.room.h).toFixed(2) });
+
+// Radio tomographic imaging, simplest form: each link "owns" an ellipse
+// around the TX->RX line (extra path length < ~0.25 m); a disturbed link
+// lights up its ellipse, and overlapping ellipses add up.
+const heat = document.createElement("canvas"); // low-res heat, scaled up smoothly
+heat.width = 80; heat.height = 60;
+const hctx = heat.getContext("2d");
+function drawMap() {
+  if (!layout) return;
+  const W = map.width, H = map.height;
+  mctx.clearRect(0, 0, W, H);
+  const links = lastReceivers.map((r) => {
+    const pos = layout.rx[r.mac || r.port];
+    const d = r.motion_threshold && r.alive ? Math.max(0, r.motion / r.motion_threshold - 0.6) : 0;
+    return pos ? { pos, d: Math.min(d, 3) } : null;
+  }).filter(Boolean);
+  const tx = layout.tx;
+  const img = hctx.createImageData(heat.width, heat.height);
+  for (let j = 0; j < heat.height; j++) for (let i = 0; i < heat.width; i++) {
+    const p = { x: (i + 0.5) / heat.width * layout.room.w, y: (j + 0.5) / heat.height * layout.room.h };
+    let num = 0, den = 0.35;
+    for (const l of links) {
+      const excess = Math.hypot(p.x - tx.x, p.y - tx.y) + Math.hypot(p.x - l.pos.x, p.y - l.pos.y) - Math.hypot(l.pos.x - tx.x, l.pos.y - tx.y);
+      const w = Math.exp(-(excess * excess) / (2 * 0.12 * 0.12));
+      num += w * l.d; den += w;
+    }
+    const v = Math.min(1, num / den / 1.5), k = (j * heat.width + i) * 4;
+    img.data[k] = 255; img.data[k + 1] = Math.round(170 - 120 * v); img.data[k + 2] = 70;
+    img.data[k + 3] = Math.round(200 * v * v);
+  }
+  hctx.putImageData(img, 0, 0);
+  mctx.imageSmoothingEnabled = true;
+  mctx.drawImage(heat, 0, 0, W, H);
+  const [tx0, ty0] = toPx(tx);
+  links.forEach((l) => {
+    const [x1, y1] = toPx(l.pos);
+    mctx.strokeStyle = l.d > 0.4 ? "rgba(255,77,94,.95)" : "rgba(74,168,255,.55)";
+    mctx.lineWidth = 2 + 4 * Math.min(1, l.d);
+    mctx.setLineDash(l.d > 0.4 ? [] : [6, 6]);
+    mctx.beginPath(); mctx.moveTo(tx0, ty0); mctx.lineTo(x1, y1); mctx.stroke();
+  });
+  mctx.setLineDash([]);
+  const dot = (x, y, color, text) => {
+    mctx.fillStyle = color; mctx.beginPath(); mctx.arc(x, y, 14, 0, 7); mctx.fill();
+    mctx.fillStyle = "#0b0f14"; mctx.font = "bold 12px sans-serif"; mctx.textAlign = "center"; mctx.textBaseline = "middle";
+    mctx.fillText(text, x, y);
+  };
+  dot(tx0, ty0, "#e6edf3", "TX");
+  lastReceivers.forEach((r, i) => {
+    const pos = layout.rx[r.mac || r.port];
+    if (pos) { const [x, y] = toPx(pos); dot(x, y, r.alive ? "#4aa8ff" : "#555", "R" + (i + 1)); }
+  });
+}
+
+// Drag boards on the map; save on release.
+let dragging = null;
+function pick(ev) {
+  const rect = map.getBoundingClientRect();
+  const x = (ev.clientX - rect.left) * map.width / rect.width, y = (ev.clientY - rect.top) * map.height / rect.height;
+  const items = [["tx", null, layout.tx], ...Object.entries(layout.rx).map(([k, v]) => ["rx", k, v])];
+  for (const [kind, key, pos] of items) {
+    const [px, py] = toPx(pos);
+    if (Math.hypot(px - x, py - y) < 22) return { kind, key, x, y };
+  }
+  return { x, y };
+}
+map.addEventListener("pointerdown", (ev) => { if (!layout) return; const p = pick(ev); if (p.kind) { dragging = p; map.setPointerCapture(ev.pointerId); } });
+map.addEventListener("pointermove", (ev) => {
+  if (!dragging) return;
+  const { x, y } = pick(ev), m = toM(Math.min(map.width, Math.max(0, x)), Math.min(map.height, Math.max(0, y)));
+  if (dragging.kind === "tx") layout.tx = m; else layout.rx[dragging.key] = m;
+  drawMap();
+});
+map.addEventListener("pointerup", () => { if (dragging) { dragging = null; post("/api/layout", layout); } });
+
+// ------------------------------------------------------------------ game
+const PHASE_TEXT = { LOBBY: "READY", GREEN: "GREEN LIGHT", RED: "RED LIGHT", OUT: "OUT!", WON: "YOU WIN" };
+function updateGame(g, events) {
+  $("light").className = "light " + g.phase;
+  $("light").textContent = PHASE_TEXT[g.phase] || g.phase;
+  $("sensed").textContent = g.sensed;
+  const r = g.round;
+  $("progress").style.width = (r ? r.progress : 0) + "%";
+  $("survival").textContent = r ? r.survival_s.toFixed(1) + "s" : "0.0s";
+  $("stillness").textContent = r ? Math.round(r.stillness * 100) + "%" : "—";
+  $("phase-left").textContent =
+    g.phase === "GREEN" || g.phase === "RED" ? `${g.phase === "RED" && g.in_grace ? "Freeze! " : ""}${g.phase_left.toFixed(1)}s left in this light`
+    : g.phase === "OUT" ? "Caught moving on red." : g.phase === "WON" ? "Made it to the finish!" : "Scan the room, then start a round.";
+  $("red").disabled = g.phase !== "GREEN";
+  const LABEL = { start: "▶ round started", green: "🟢 green light", red: "🔴 red light", red_called: "📣 red light called",
+                  eliminated: "❌ eliminated", won: "🏆 finished" };
+  $("events").innerHTML = events.slice().reverse()
+    .map((e) => `<li>${LABEL[e.kind] || e.kind}${e.detail ? " · " + e.detail.replace(/[<>&]/g, "") : ""}</li>`).join("");
+}
+
+// ------------------------------------------------------------------ loop
+async function tick() {
+  try {
+    const live = await api("/api/live?rows=10");
+    $("verdict").textContent = live.calibrated ? live.fused : "NOT SCANNED";
+    $("verdict").className = "verdict " + (live.calibrated ? live.fused : "");
+    $("status").textContent = live.calibrating ? "Scanning the room… keep the area empty and still"
+      : `${live.receivers.filter((r) => r.alive).length}/${live.receivers.length} receivers live`;
+    $("scan").disabled = live.calibrating;
+    ensureReceiverViews(live.receivers);
+    live.receivers.forEach((r, i) => updateReceiver(rxViews[i], r, i));
+    lastReceivers = live.receivers;
+    if (!layout) layout = await api("/api/layout");
+    drawMap();
+    updateGame(live.game, live.events);
+  } catch (e) {
+    $("status").textContent = "Server not reachable…";
+  }
+  setTimeout(tick, 100);
+}
+
+$("scan").onclick = () => post("/api/calibrate?seconds=10");
+$("start").onclick = () => post("/api/game/start", { player: $("player").value || "Player" }).then((r) => { if (!r.ok) alert(r.reason); });
+$("red").onclick = () => post("/api/game/red?by=host");
+tick();
+</script>
+</body>
+</html>
