@@ -5,13 +5,13 @@ Treat it as the plan of record; update it as decisions change.
 
 ## The idea in one line
 A real person hidden behind a curtain plays Red Light, Green Light, and **Wi-Fi signals** (ESP32 CSI)
-decide whether they moved. The same sensing powers a **Disaster mode** (the hidden person is a
-"trapped survivor" the system finds) and a **Guardian mode** (fall detection at home without cameras).
+decide whether they moved. The same sensing powers a **Fire rescue mode** (the hidden person is
+trapped in a smoke-filled room and the system finds them) and a **Guardian mode** (fall detection at home without cameras).
 A **Roblox** world mirrors the real person as an avatar, and online players can call "red light".
 
-Pitch line: "Same Wi-Fi, three uses: a game, a disaster rescue, and keeping grandparents safe at home
-without cameras. If Wi-Fi can catch you holding your breath behind a curtain, it can find a survivor
-behind a wall after a hurricane."
+Pitch line: "Same Wi-Fi, three uses: a game, a fire rescue, and keeping grandparents safe at home
+without cameras. If Wi-Fi can catch you holding your breath behind a curtain, it can tell firefighters
+which smoke-filled room someone is still in, using the routers the building already has."
 
 ## Why this project (the goal)
 Beat past winners like Farsight (rover + VR + Gaussian splatting) and Permanence (3D VLM + object
@@ -20,6 +20,10 @@ research, real hardware, measured numbers, and judges taking part. Judges score:
 usefulness, wow/creativity, completeness (works live), presentation. Line count does not matter.
 
 ## Hardware we have / plan to buy
+**Reality check (2026-10-17): we only have 4 ESP32s (1 TX + 3 RX), the laptop, a hub, a battery and
+a phone. No LED strip, fan, motors, servos, gas or pulse sensors.** So: booth cues = laptop speech
+(`server/app.py --speak`), fire / smart-light effects live on screen and in Roblox, and breathing
+ground truth comes from the camera or paced breathing. The list below is the original wish list.
 - ESP32 dev boards (classic ESP32, e.g. 3-pack ESP-WROOM-32 with CP2102). Classic ESP32 supports CSI.
   Start with 2 (one TX, one RX). 4-5 ESP32-S3 boards only if we attempt pose/location.
 - MG90S servos, motors (one becomes the booth fan), wires, sensors. **No 3D printer** (use cardboard/foam board).
@@ -38,12 +42,21 @@ usefulness, wow/creativity, completeness (works live), presentation. Line count 
   sensitivity meter. Uses only motion detection, so it's the most reliable game.
 - **Zen Master** (stretch, needs breathing): calmest, slowest steady breathing wins.
 
-### 2. Disaster mode (the surprise twist, mostly physical + dashboard)
-- After a game round: "Now you're trapped." A disaster hits.
-- **Booth 4D effects** (cheap, big impact): fan blows wind (hurricane), LEDs flicker (lightning /
-  power outage), speaker plays thunder, rumble, sirens; optional vibration motor shakes the "rubble".
-- The **web dashboard** finds the hidden person: "Survivor detected, breathing, not moving, Priority 1"
-  (+ gas warning if the gas sensor is built).
+### 2. Fire rescue mode (the surprise twist, mostly physical + dashboard)
+Decided 2026-10-17 on a mentor's suggestion: fire instead of earthquake/hurricane.
+- After a game round: "Now there's a fire. You're trapped." The building fills with smoke.
+- **Why fire is the strong story:** smoke blinds normal cameras but does not block Wi-Fi; buildings
+  already have Wi-Fi routers, so no new hardware; firefighters could know which rooms still have
+  people (and whether they're moving or breathing) *before* going in.
+- **Honest limit:** thermal cameras also see through smoke, but not through walls or closed doors.
+  Wi-Fi can (a few meters, interior walls). Pitch that edge, not "replaces thermal cameras".
+- **Booth 4D effects** (cheap, big impact): LEDs flicker orange/red (flames), speaker plays crackling
+  fire + smoke alarm + sirens, fan blows "heat". **No real smoke, haze/fog machine or flames** at the
+  venue (sets off fire alarms); fake it with light and sound.
+- **MQ-2 gas sensor fits directly:** it detects smoke. Demo with a swab of isopropyl/hand sanitizer
+  (see MQ notes below), shown as Normal/Warning/Danger.
+- The **web dashboard** finds the hidden person: "Person detected in Room 2, not moving, breathing,
+  Priority 1" (+ smoke level if the gas sensor is built).
 - Roblox here is limited to optional visuals (see Roblox scope).
 
 ### 3. Guardian mode (the real-world use)
@@ -56,8 +69,8 @@ usefulness, wow/creativity, completeness (works live), presentation. Line count 
 ## Roblox scope (decided: keep it simple)
 - **In scope:** the real person's avatar moves when they move and freezes/gets knocked out based on
   Wi-Fi; Roblox players can press "red light" (triggers the booth sound/LEDs, optionally a servo).
-- **Optional stretch:** simple disaster visuals in Roblox (camera shake, falling parts, rising water)
-  timed with Disaster mode.
+- **Optional stretch:** simple fire visuals in Roblox (Fire/Smoke effects, orange lighting, the
+  building filling with smoke) timed with Fire rescue mode.
 - **Cut / too difficult for now:** a full Roblox rescue operation (multiplayer digging, rescue
   gameplay). Rescue lives on the web dashboard instead.
 - Original art only; do not copy the Squid Game doll or other copyrighted assets.
@@ -80,12 +93,12 @@ audience sees it via webcam or its Roblox twin). Cut it first if short on time.
 | Core | Wi-Fi Heist | 2-4 |
 | Core | Live "Wi-Fi vision" waterfall screen (proves it's real) | 2-4 |
 | Surprise | Roblox avatar moves/freezes; Roblox players trigger red light | 6-10 |
-| Surprise | Booth 4D disaster effects (fan, lightning LEDs, thunder) | 2-4 |
+| Surprise | Booth 4D fire effects (flicker LEDs, crackle + alarm sound, fan) | 2-4 |
 | Stretch 1 | Fall detection (rule-based) + Guardian/Rescue dashboard | 7-14 |
 | Stretch 1 | Breathing (breath-holding callout, Zen Master) | 6-12 |
 | Stretch 2 | "How did it catch me?" replay; accuracy scoreboard (Wi-Fi vs hidden camera); AI gator trash talk | 8-14 |
-| Stretch 2 | Roblox disaster visuals | 6-12 |
-| Stretch 3 | Gas sensor in Disaster mode; QR "see your round" page (no names/emails stored) | 5-9 |
+| Stretch 2 | Roblox fire visuals | 6-12 |
+| Stretch 3 | MQ-2 smoke sensor in Fire rescue mode; QR "see your round" page (no names/emails stored) | 5-9 |
 | Cut | Roblox rescue operation, Wi-Fi heart rate, Hide and Seek with location, full skeleton pose, 3D printed parts | - |
 
 Core + Surprise is ~22-40 person-hours. With a team of 3-4 (~110 person-hours budget), Stretch 1 and
@@ -93,8 +106,8 @@ some of Stretch 2 are realistic. Always keep one working demo; cut from the bott
 
 ## Demo flow (about 3 minutes)
 1. Play: judge plays Red Light, Green Light behind the curtain, gets caught; replay shows the signal spike.
-2. Twist: "Now you're trapped." Fan, lightning LEDs, thunder.
-3. Rescue: dashboard shows "Survivor detected, breathing, not moving."
+2. Twist: "Now there's a fire. You're trapped." Orange flicker LEDs, crackling + smoke alarm, fan.
+3. Rescue: dashboard shows "Person detected, not moving, breathing" (+ smoke level).
 4. Real use: Guardian mode; teammate falls onto the mat -> "Fall detected."
 5. Pitch line (above). Show measured accuracy numbers.
 
@@ -106,8 +119,8 @@ some of Stretch 2 are realistic. Always keep one working demo; cut from the bott
 - Medium-low: breathing in a crowd. Low: activity recognition / pose on single-antenna ESP32.
 - Wi-Fi heart rate is not reliable on ESP32; use camera rPPG (pyVHR) or MAX30102 if needed.
 - Wi-Fi does NOT go through meters of rubble/concrete. Realistic: fabric, drywall, wood, one interior
-  wall, a few meters. Frame rescue use as light debris / wood-frame hurricane damage / room sweeps.
-  Deep rubble needs radar like NASA JPL's FINDER. Do not overclaim to judges.
+  wall, a few meters. Frame fire rescue as room-by-room sweeps through smoke, walls and closed doors
+  using existing building Wi-Fi. Deep rubble needs radar like NASA JPL's FINDER. Do not overclaim.
 
 ## Go/no-go test (do before the hackathon)
 Busy place (dining hall/library), person behind a curtain 1-1.5 m from the ESP32 link:
@@ -185,13 +198,20 @@ Note: the big results used special radios / multi-antenna routers, not ESP32s.
   Reuse map/dashboard experience for the Rescue/Guardian dashboard.
 - A sign-language learning game ("Sign Hero") was done at a previous SwampHacks; avoid sign-language ideas.
 
+## Polish list for the end (requested 2026-10-17, do after the core features)
+- Web "Wi-Fi vision" UI: redesign so it looks hand-made and polished, not generic/"AI-looking".
+- Roblox game controls: skip the round, pause, start early (host/booth buttons).
+- Spoken cues: "Room scanned. Next player, go in." sounds bad; rewrite the lines and pick a
+  better voice (macOS `say -v` premium voices, or a TTS service).
+- Possibly: elimination needs MOVING for ~0.75 s in a row during red (fewer twitch/glitch catches).
+
 ## Build order
 1. Before event: flash esp-csi to 2 ESP32s, stream CSI to laptop, see motion; run go/no-go test.
 2. Motion detection + calibration at the venue.
 3. Red Light/Green Light on local screen (offline backup) + speaker/LED cue inside the booth.
 4. Heist + Wi-Fi vision screen.
 5. Roblox avatar moving/freezing, then Roblox players triggering red light.
-6. Booth 4D disaster effects.
+6. Booth 4D fire effects.
 7. Fall detection (rule-based) + Rescue/Guardian dashboard; breathing.
 8. Stretch items in priority order.
 Lock features; always keep one working demo; record backup video as soon as core works.
