@@ -275,6 +275,10 @@ Also: Guardian "room memory" day strip (state_agg), and forks to re-score old ga
   it and pulses the echo at the breathing rate. Replaying breath_02 through the live path (model
   trained on breath_01 only): breathing 96% while breathing, 0% once a window is fully empty.
   Server loads sensing/host/models/breathing.json (local, not in git) when it exists.
+- Booth motion model with phone-checked labels (phone_clean.py drops "freeze" moments where the phone
+  felt movement and "move" moments where it felt stillness): booth_01+02 (behind curtain) +
+  booth_03c (in front, TX 1 m behind), each held out: 87.5% accuracy, freezes 80% correct (was 47%),
+  moves 90%, empty 94.5%. Run the server with --model ../sensing/host/models/wifind_booth.json.
 - Everything goes to Tiger: recorders upload when they finish (tiger_upload.py: recordings,
   training_windows kind motion/breathing, breathing rates with true pace, readings); train_breathing.py
   and evaluate.py save every reported number to model_runs; backfill_tiger.py for older/failed uploads.
