@@ -21,6 +21,7 @@ Training data (labels -> class):
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 
 import numpy as np
@@ -134,7 +135,7 @@ def session_dataset(paths: list[str]) -> dict:
         xs.append(scaled); conf.append(feats[:, 0]); rates.append(r)
     conf, rates = np.array(conf), np.array(rates)
     best = np.nanargmax(np.where(np.isnan(conf), -1, conf), axis=0)
-    truth = np.array([float(l.split("_")[1]) if l and l.startswith("breath_") else np.nan for l in lab])
+    truth = np.array([float(l.split("_")[1]) if l and re.fullmatch(r"breath_\d+", l) else np.nan for l in lab])
     return {"t": grid, "x": np.hstack(xs), "y": y, "truth": truth, "rate": rates[best, np.arange(len(grid))],
             "conf": np.nanmax(np.where(np.isnan(conf), -1, conf), axis=0),
             "label": np.array([l or "" for l in lab], dtype=object)}

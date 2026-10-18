@@ -121,6 +121,7 @@ def record_script(plan: list[tuple[float, float, str, str]], output: str, header
         threading.Thread(target=read, args=(p,), daemon=True).start()
 
     start = time.monotonic()
+    clock = time.time() - time.monotonic()  # real time minus uptime (lines are stamped with uptime)
     try:
         for seg_start, _, seg, prompt in plan:
             while time.monotonic() - start < seg_start:
@@ -142,7 +143,7 @@ def record_script(plan: list[tuple[float, float, str, str]], output: str, header
         mac = macs.get(port, "")
         out = output if len(ports) == 1 else f"{base}_rx{mac.replace(':', '')[-4:] or os.path.basename(port)}{ext}"
         with open(out, "w") as f:
-            f.write(f"# {header} {time.strftime('%Y-%m-%d %H:%M:%S')} port={port} mac={mac}\n")
+            f.write(f"# {header} {time.strftime('%Y-%m-%d %H:%M:%S')} clock={clock:.3f} port={port} mac={mac}\n")
             f.write("\n".join(rows[port]) + "\n")
         print(f"saved {len(rows[port])} lines to {out}")
         saved.append(out)

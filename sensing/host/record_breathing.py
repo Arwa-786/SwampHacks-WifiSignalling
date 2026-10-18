@@ -31,12 +31,18 @@ def say(text: str, rate: int = 200) -> None:
     subprocess.Popen(["say", "-r", str(rate), text])
 
 
-def schedule(rates: list[int]) -> list[tuple[float, float, str]]:
-    """(start, end, label) for every segment, in seconds from the start."""
+def schedule(rates: list[int], natural_min: float = 0.0) -> list[tuple[float, float, str]]:
+    """(start, end, label) for every segment, in seconds from the start.
+    natural_min > 0: one long "breathe normally" segment instead of paced ones
+    (the true rate then comes from a phone on the belly, phone_truth.py)."""
     plan, t = [], 0.0
     for dur, label in [(EMPTY_S, "empty"), (SETTLE_S, "settle")]:
         plan.append((t, t + dur, label))
         t += dur
+    if natural_min > 0:
+        plan.append((t, t + natural_min * 60, "breath_natural"))
+        t += natural_min * 60
+        rates = []
     for r in rates:
         plan.append((t, t + BREATH_S, f"breath_{r}"))
         t += BREATH_S
@@ -53,6 +59,8 @@ def main() -> None:
     parser.add_argument("--rates", nargs="*", type=int, default=[10, 15, 20], help="breaths per minute to pace")
     parser.add_argument("--person", default="unknown")
     parser.add_argument("--position", default="unknown")
+    parser.add_argument("--natural", type=float, default=0.0, metavar="MINUTES",
+                        help="breathe normally for this long instead of paced (wear the phone: phone_truth.py)")
     args = parser.parse_args()
 
     from multi_rx import find_rx_ports
@@ -60,7 +68,8 @@ def main() -> None:
     ports = args.ports or find_rx_ports()
     if not ports:
         raise SystemExit("No RX boards streaming CSI. Is the WiFind server still running? Stop it first.")
-    plan = schedule(args.rates)
+    plan = schedule(args.rates, args.natural)
+    clock = time.time() - time.monotonic()  # lines are stamped with uptime; this maps them to clock time
     total = plan[-1][1]
     print(f"Recording {len(ports)} receiver(s) for {total / 60:.1f} min: {ports}")
 
@@ -98,7 +107,10 @@ def main() -> None:
             elif seg == "empty_end":
                 say("Now walk at least three meters away again, for thirty seconds.")
             elif seg == "settle":
-                say("Come back to your spot behind the curtain, stay still, and breathe with my voice.")
+                say("Come back to your spot behind the curtain and stay still. "
+                    + ("Just breathe normally." if args.natural else "Breathe with my voice."))
+            elif seg == "breath_natural":
+                say("Breathe normally until I call you.")
             elif seg == "rest":
                 say("Rest. Breathe normally, stay still.")
             else:
@@ -126,7 +138,8 @@ def main() -> None:
         mac = macs.get(port, "")
         out = args.output if len(ports) == 1 else f"{base}_rx{mac.replace(':', '')[-4:] or os.path.basename(port)}{ext}"
         with open(out, "w") as f:
-            f.write(f"# record_breathing {time.strftime('%Y-%m-%d %H:%M:%S')} rates={args.rates} port={port} "
+            f.write(f"# record_breathing {time.strftime('%Y-%m-%d %H:%M:%S')} rates={args.rates} "
+                    f"natural={args.natural} clock={clock:.3f} port={port} "
                     f"mac={mac} person={args.person.replace(' ', '_')} position={args.position.replace(' ', '_')}\n")
             f.write("\n".join(rows[port]) + "\n")
         print(f"saved {len(rows[port])} lines to {out}")
