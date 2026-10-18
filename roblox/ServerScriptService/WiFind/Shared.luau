@@ -9,7 +9,6 @@
 --   Host      RemoteEvent  client -> server: host buttons ("start" | "pause" | "end" | "rescan")
 --   Message   StringValue  big line on everyone's HUD
 --   TimeLeft  NumberValue  seconds left in the round
---   CallRed   RemoteEvent  client -> server: "red light!" button
 --   Fx        RemoteEvent  server -> clients: ("caught" | "won", character) for sounds + camera
 --   WiFi/State      StringValue  MOVING / STILL / EMPTY / UNCALIBRATED / OFFLINE
 --   WiFi/Motion     NumberValue  motion / threshold (1.0 = just counts as moving)
@@ -39,7 +38,6 @@ return {
 	Host = make("RemoteEvent", "Host", root),
 	Message = make("StringValue", "Message", root, "Starting..."),
 	TimeLeft = make("NumberValue", "TimeLeft", root, 0),
-	CallRed = make("RemoteEvent", "CallRed", root),
 	Fx = make("RemoteEvent", "Fx", root),
 	WiFi = {
 		State = make("StringValue", "State", wifi, "OFFLINE"),

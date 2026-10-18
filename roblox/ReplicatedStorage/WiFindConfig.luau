@@ -34,7 +34,6 @@ return {
 	ROUND_S = 90,
 	GREEN_RANGE_S = { 2.5, 6 },
 	RED_RANGE_S = { 3, 5 },
-	RED_CALL_COOLDOWN_S = 8, -- how often online players may call red light
 
 	-- Whose avatar Wi-Fi controls: the Roblox account signed in on the booth
 	-- laptop (Arwa's, the experience owner). 0 = the first player in the server,

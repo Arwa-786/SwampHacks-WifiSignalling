@@ -68,7 +68,8 @@ Decided 2026-10-17 on a mentor's suggestion: fire instead of earthquake/hurrican
 
 ## Roblox scope (decided: keep it simple)
 - **In scope:** the real person's avatar moves when they move and freezes/gets knocked out based on
-  Wi-Fi; Roblox players can press "red light" (triggers the booth sound/LEDs, optionally a servo).
+  Wi-Fi. The game calls every light itself; online players do NOT get a "red light" button
+  (removed 2026-10-17 at Arwa's request).
 - **Optional stretch:** simple fire visuals in Roblox (Fire/Smoke effects, orange lighting, the
   building filling with smoke) timed with Fire rescue mode.
 - **Cut / too difficult for now:** a full Roblox rescue operation (multiplayer digging, rescue

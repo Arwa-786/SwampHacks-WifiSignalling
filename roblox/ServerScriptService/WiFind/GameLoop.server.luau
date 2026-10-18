@@ -7,7 +7,6 @@
 --     laptop's verdict is MOVING. Caught if Wi-Fi sees MOVING on red (after the
 --     grace period). With no such player in the server, a stand-in avatar runs.
 --   * online Roblox players, judged the usual way: Humanoid.MoveDirection.
--- Anyone, including lobby spectators, can press "RED LIGHT!" to end a green early.
 --
 -- Between rounds Roblox runs the booth, step by step, and tells the laptop each one:
 --   RESULTS -> LOBBY ("Hider, step out!") -> SCAN (laptop learns the empty room)
@@ -73,12 +72,8 @@ end
 
 -- The booth speaker/LEDs (the hidden player's only cue) follow these.
 local BOOTH_PHASES = { LOBBY = true, SCAN = true, HIDE = true, COUNTDOWN = true, GREEN = true, RED = true }
-local greenStartedAt = 0
 local function setPhase(phase)
 	Shared.Phase.Value = phase
-	if phase == "GREEN" then
-		greenStartedAt = now()
-	end
 	if BOOTH_PHASES[phase] then
 		WiFi.Booth:Fire(phase)
 	end
@@ -133,22 +128,6 @@ Shared.Host.OnServerEvent:Connect(function(player, cmd)
 		end
 		Shared.Paused.Value = paused
 	end
-end)
-
--- Red light called by a Roblox player. One shared cooldown so the hidden
--- player isn't spammed, and never in the first 1.5 s of a green.
-local redCalledBy = nil
-local lastRedCall = -math.huge
-Shared.CallRed.OnServerEvent:Connect(function(player)
-	local t = now()
-	if Shared.Phase.Value ~= "GREEN" or Shared.Paused.Value or t - greenStartedAt < 1.5 then
-		return
-	end
-	if t - lastRedCall < Config.RED_CALL_COOLDOWN_S then
-		return
-	end
-	lastRedCall = t
-	redCalledBy = player.DisplayName
 end)
 
 ---------------------------------------------------------------- real player
@@ -381,15 +360,11 @@ local function runRound()
 
 	local over = false
 	while not over do
-		redCalledBy = nil
 		setPhase("GREEN")
 		Course.setLight(course, false)
 		Shared.Message.Value = "Move!"
 		local greenEnd = now() + rand(Config.GREEN_RANGE_S)
 		while now() < greenEnd and not over do
-			if redCalledBy then
-				break
-			end
 			over = step(false)
 			wait(0.1)
 		end
@@ -400,7 +375,7 @@ local function runRound()
 		setPhase("RED")
 		redLights += 1
 		Course.setLight(course, true)
-		Shared.Message.Value = redCalledBy and (redCalledBy .. " called RED LIGHT!") or "Freeze!"
+		Shared.Message.Value = "Freeze!"
 		redStart = now()
 		local redEnd = redStart + rand(Config.RED_RANGE_S)
 		while now() < redEnd and not over do

@@ -1,7 +1,6 @@
 -- Hud (LocalScript in StarterPlayerScripts): builds the on-screen UI in code.
 --   top:          GREEN LIGHT / RED LIGHT banner, message line, round timer
 --   bottom-left:  "Wi-Fi vision" card: what the sensors see of the real player
---   bottom-right: RED LIGHT! button for online players and spectators
 --   centre:       between rounds, a card explaining the game + what's happening
 --                 (step out / scanning / hide); after a round, the results card
 --   right:        host buttons under the timer (START NOW, PAUSE, END ROUND, RESCAN), hosts only
@@ -12,12 +11,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Lighting = game:GetService("Lighting")
 
-local Config = require(ReplicatedStorage:WaitForChild("WiFindConfig"))
 local root = ReplicatedStorage:WaitForChild("WiFind")
 local Phase = root:WaitForChild("Phase")
 local Message = root:WaitForChild("Message")
 local TimeLeft = root:WaitForChild("TimeLeft")
-local CallRed = root:WaitForChild("CallRed")
 local Paused = root:WaitForChild("Paused")
 local Results = root:WaitForChild("Results")
 local GatorLine = root:WaitForChild("GatorLine")
@@ -115,24 +112,6 @@ local dotsRow = new("Frame", { Position = UDim2.fromOffset(18, 110), Size = UDim
 new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 8),
 	VerticalAlignment = Enum.VerticalAlignment.Center }, dotsRow)
 
----------------------------------------------------------------- red button
-local button = new("TextButton", { AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -24, 1, -24),
-	Size = UDim2.fromOffset(200, 84), BackgroundColor3 = RED, Font = Enum.Font.GothamBlack, TextScaled = true,
-	TextColor3 = Color3.new(1, 1, 1), Text = "RED LIGHT!", AutoButtonColor = true }, gui)
-round(button, 20)
-new("UIPadding", { PaddingTop = UDim.new(0, 18), PaddingBottom = UDim.new(0, 18) }, button)
-new("UIStroke", { Thickness = 3, Color = Color3.new(1, 1, 1), Transparency = 0.4,
-	ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, button)
-
-local readyAt = 0
-button.Activated:Connect(function()
-	if os.clock() < readyAt or Phase.Value ~= "GREEN" then
-		return
-	end
-	readyAt = os.clock() + Config.RED_CALL_COOLDOWN_S
-	CallRed:FireServer()
-end)
-
 ---------------------------------------------------------------- centre card
 
 -- One card in the middle of the screen. Between rounds it explains the game
@@ -178,7 +157,7 @@ local INTRO_ROWS = {
 	{ "Behind a curtain at the booth", "a real person" },
 	{ "Watching them", "only Wi-Fi, no camera" },
 	{ "The cyan avatar", "is them" },
-	{ "Your job", "call RED LIGHT!" },
+	{ "Lights", "called by the game" },
 }
 local BETWEEN = { LOBBY = true, SCAN = true, HIDE = true }
 
@@ -330,12 +309,3 @@ WReceivers.Changed:Connect(onWifi)
 onPhase()
 onWifi()
 message.Text = Message.Value
-
--- button shows its cooldown
-while true do
-	local left = readyAt - os.clock()
-	local usable = left <= 0 and Phase.Value == "GREEN"
-	button.Text = left > 0 and ("WAIT %d"):format(math.ceil(left)) or "RED LIGHT!"
-	button.BackgroundTransparency = usable and 0 or 0.5
-	task.wait(0.2)
-end
