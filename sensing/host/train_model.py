@@ -62,7 +62,8 @@ class TinyMLP:
         x = (x - self.mean) / self.std
         onehot = np.eye(self.w2.shape[1])[y]
         # Balance classes so a long EMPTY recording doesn't drown MOVING.
-        weight = (len(y) / (len(CLASSES) * np.maximum(np.bincount(y, minlength=len(CLASSES)), 1)))[y][:, None]
+        n_out = self.w2.shape[1]
+        weight = (len(y) / (n_out * np.maximum(np.bincount(y, minlength=n_out), 1)))[y][:, None]
         params = [self.w1, self.b1, self.w2, self.b2]
         m = [np.zeros_like(p) for p in params]
         v = [np.zeros_like(p) for p in params]
