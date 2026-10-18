@@ -94,7 +94,8 @@ class Receiver:
 
 
 class MultiReceiver:
-    def __init__(self, ports: list[str] | None = None, model_path: str | None = None, scan_path: str | None = None):
+    def __init__(self, ports: list[str] | None = None, model_path: str | None = None, scan_path: str | None = None,
+                 breathing_model_path: str | None = None):
         if ports is None:
             ports = find_rx_ports()
         if not ports:
@@ -105,6 +106,12 @@ class MultiReceiver:
         # once their STAT lines arrive; until then, or if a board is missing,
         # state() falls back to the per-board rule detectors + vote.
         self.hybrid = LiveHybrid(HybridModel(model_path), {}) if model_path else None
+        # Breathing model (train_breathing.py --out ...): "still and breathing" vs empty,
+        # plus a rate. Its baseline comes from each room scan.
+        from breathing_model import BreathingLive
+
+        self.breathing = BreathingLive(breathing_model_path)
+        self.breathing_state: dict = {"status": "no model" if not breathing_model_path else "needs scan"}
         # The last room scan is saved here and restored per board (by MAC) on
         # start, so restarting the server doesn't mean asking everyone to leave
         # again. If the boards moved since, scan again.
@@ -120,6 +127,7 @@ class MultiReceiver:
     def start(self) -> None:
         for rx in self.receivers:
             threading.Thread(target=self._read, args=(rx,), daemon=True).start()
+        threading.Thread(target=self._breathe, daemon=True).start()
         if self.hybrid:
             threading.Thread(target=self.hybrid.run_forever, daemon=True).start()
 
@@ -161,6 +169,7 @@ class MultiReceiver:
             if frame is None:
                 continue
             signal = frame.signal
+            self.breathing.push(board_key(rx.mac), t, signal)
             with rx.lock:
                 rx.rssi = frame.rssi
                 rx.last_frame_time = t
@@ -184,7 +193,9 @@ class MultiReceiver:
             with rx.lock:
                 rx.calibrating = []
         self._calibrating.set()
+        scan_start = time.monotonic()
         time.sleep(seconds)
+        self.breathing.scan(scan_start, time.monotonic())
         self._calibrating.clear()
         for rx in self.receivers:
             with rx.lock:
@@ -271,8 +282,18 @@ class MultiReceiver:
             "ml_missing_boards": self.hybrid.missing,
         }
 
+    def _breathe(self) -> None:
+        """Every 2 s: the breathing model's view (slow: 15-40 s windows)."""
+        while True:
+            time.sleep(2.0)
+            try:
+                self.breathing_state = self.breathing.update(time.monotonic(), moving=self.state() == MOVING)
+            except Exception as e:  # never take the receivers down with it
+                self.breathing_state = {"status": f"error: {type(e).__name__}"}
+
     def snapshot(self) -> dict:
-        return {"fused": self.state(), "receivers": [rx.summary() for rx in self.receivers], **self.detector_info()}
+        return {"fused": self.state(), "receivers": [rx.summary() for rx in self.receivers],
+                "breathing": self.breathing_state, **self.detector_info()}
 
     def waterfall(self, index: int) -> np.ndarray:
         rx = self.receivers[index]

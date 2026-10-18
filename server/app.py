@@ -54,6 +54,8 @@ LAYOUT_PATH = os.path.join(HERE, "layout.json")
 # Trained Wi-Fi model (train_model.py --fuse). Used when present; otherwise the
 # per-board rule detectors decide.
 MODEL_PATH = os.path.join(HERE, "..", "sensing", "host", "models", "wifind_fused.json")
+# Breathing model (train_breathing.py --out ...); used when present.
+BREATHING_MODEL_PATH = os.path.join(HERE, "..", "sensing", "host", "models", "breathing.json")
 SCAN_PATH = os.path.join(HERE, "room_scan.json")  # last room scan, restored on restart
 # Auto-scan between rounds (--auto-scan): Roblox gives the hider time to step
 # out (Config.STEP_OUT_S), then says SCAN and we scan the empty room.
@@ -96,8 +98,12 @@ class FakeMulti:
 
     def snapshot(self):
         t = time.monotonic() - self.start_t
+        still = self.state() == "STILL"
         return {
             "fused": self.state(),
+            # demo only: a made-up breathing reading so the screens can be built without boards
+            "breathing": {"status": "ok", "p": 0.9 if still else 0.2, "present": still, "per_minute": 16.0 if still else None}
+            if self.state() != "MOVING" else {"status": "moving"},
             "receivers": [
                 {
                     "port": f"/dev/demo{i}",
@@ -321,6 +327,7 @@ def create_app(multi, store: Store | None = None, speak: bool = False, auto_scan
             "simulated": isinstance(multi, FakeMulti),
             "ratios": [round(r, 2) for r in ratios],  # per board, for the swamp page's bobbers
             "detector": snap.get("detector", "rules"),
+            "breathing": snap.get("breathing", {"status": "no model"}),  # see breathing_model.BreathingLive
         }
 
     @app.get("/api/store")
@@ -420,6 +427,7 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--model", default=MODEL_PATH, help="fused Wi-Fi model (train_model.py --fuse)")
     parser.add_argument("--no-model", action="store_true", help="use the rule detector only")
+    parser.add_argument("--breathing-model", default=BREATHING_MODEL_PATH, help="train_breathing.py --out ... (used if it exists)")
     parser.add_argument("--speak", action="store_true", help="say red/green light out loud (booth cue)")
     parser.add_argument("--gator", action="store_true", help="AI gator lines after each round (Vultr; needs --speak to hear them)")
     parser.add_argument("--gator-model", default=None, help="Vultr model (default VULTR_CHAT_MODEL in .env; pick with gator_eval.py)")
@@ -430,7 +438,10 @@ def main() -> None:
 
     model = None if args.no_model or not os.path.exists(args.model) else args.model
     print(f"Detector: {'trained Wi-Fi model ' + model if model else 'rules (no model)'}")
-    multi = FakeMulti() if args.demo else MultiReceiver(args.ports, model_path=model, scan_path=SCAN_PATH)
+    breathing = args.breathing_model if os.path.exists(args.breathing_model) else None
+    print(f"Breathing: {'model ' + breathing if breathing else 'no model (train_breathing.py --out ...)'}")
+    multi = FakeMulti() if args.demo else MultiReceiver(args.ports, model_path=model, scan_path=SCAN_PATH,
+                                                        breathing_model_path=breathing)
     multi.start()
     print("Open http://localhost:%d  (Scan the room first, with the area empty)" % args.port)
     voice = Voice()

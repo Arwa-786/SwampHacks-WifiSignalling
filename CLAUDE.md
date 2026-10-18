@@ -270,6 +270,11 @@ Also: Guardian "room memory" day strip (state_agg), and forks to re-score old ga
   Natural session with a phone on the belly (phyphox, phone_truth.py, ~22/min): with 6-36/min every
   board read ~9 (12.6 off); BREATHING_BAND moved to 12-36/min -> 2.3 off, 41% within ±2.
   Breathing detector tested across the 2 sessions: 100% found, 0-2% empty false; old rule 19-20%.
+  Live: breathing_model.BreathingLive in MultiReceiver (baseline from each room scan, measured the
+  same way in training: last 10 s of empty in 3 s chunks); /api/sense "breathing"; Rescue Watch shows
+  it and pulses the echo at the breathing rate. Replaying breath_02 through the live path (model
+  trained on breath_01 only): breathing 96% while breathing, 0% once a window is fully empty.
+  Server loads sensing/host/models/breathing.json (local, not in git) when it exists.
 - Everything goes to Tiger: recorders upload when they finish (tiger_upload.py: recordings,
   training_windows kind motion/breathing, breathing rates with true pace, readings); train_breathing.py
   and evaluate.py save every reported number to model_runs; backfill_tiger.py for older/failed uploads.

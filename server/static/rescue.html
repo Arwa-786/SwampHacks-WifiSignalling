@@ -68,6 +68,18 @@
   async function pollSense() { S.sense = await get("/api/sense"); S.online = !!S.sense && S.sense.state !== "OFFLINE"; }
   async function pollRescue() { const r = await get("/api/ai/rescue?room=Room%201"); if (r) S.rescue = r; }
 
+  // the breathing model's live answer (breathing_model.BreathingLive), as words for the notes
+  function breathing() {
+    const b = S.online && S.sense.breathing;
+    if (!b) return { text: "?", col: "L", rate: null };
+    if (b.status === "ok") return b.present
+      ? { text: b.per_minute ? `YES ~${Math.round(b.per_minute)}/MIN` : "YES", col: "l", rate: b.per_minute }
+      : { text: "NO", col: "W", rate: null };
+    const words = { "moving": "WAIT", "needs scan": "NEEDS SCAN", "warming up": "WARMING UP",
+                    "weak signal": "WEAK SIGNAL", "no model": "NO MODEL" };
+    return { text: words[b.status] || "?", col: "L", rate: null };
+  }
+
   // the room's status, in one place: what the sign, the echo and the notes show
   function status() {
     if (!S.online) return { key: "offline", sign: "NO SIGNAL", panel: "N", person: "?", moving: "?", priority: "-",
@@ -78,8 +90,12 @@
     const line = S.rescue && S.rescue.line;
     if (st === "MOVING") return { key: "moving", sign: "PERSON, MOVING", panel: "O", person: "YES", moving: "YES",
       priority: "2", say: line || "ROOM 1: SOMEONE IS INSIDE AND MOVING. PRIORITY 2." };
-    if (st === "STILL") return { key: "still", sign: "PERSON, NOT MOVING", panel: "R", person: "YES", moving: "NO",
-      priority: "1", say: line || "ROOM 1: SOMEONE IS INSIDE AND NOT MOVING. PRIORITY 1." };
+    if (st === "STILL") {
+      const br = breathing();
+      const extra = br.rate ? ` BREATHING ABOUT ${Math.round(br.rate)} TIMES A MINUTE.` : "";
+      return { key: "still", sign: "PERSON, NOT MOVING", panel: "R", person: "YES", moving: "NO",
+        priority: "1", say: (line || "ROOM 1: SOMEONE IS INSIDE AND NOT MOVING. PRIORITY 1.") + extra };
+    }
     return { key: "empty", sign: "NOBODY SEEN", panel: "G", person: "NOT SEEN", moving: "-", priority: "-",
       say: "ROOM 1: THE WI-FI DOESN'T SEE ANYONE. CHECK IT ANYWAY." };
   }
@@ -167,7 +183,9 @@
 
     // the Wi-Fi echo at the hiding spot: the only thing drawn about the person
     if (st.key === "still") {
-      const r = 3 + ((reduce ? 0 : step) % 12);
+      const rate = breathing().rate;                 // breaths per minute -> one ring cycle per breath
+      const cycle = rate ? 60000 / rate : 1500;
+      const r = 3 + (reduce ? 0 : Math.floor(((t % cycle) / cycle) * 12));
       ring(ctx, "C", hide[0], hide[1], r, r > 9 ? 3 : 1);
       ring(ctx, "C", hide[0], hide[1], Math.max(2, r - 6), 1);
       ellipse(ctx, "C", hide[0], hide[1], 1, 1);
@@ -212,12 +230,14 @@
     rect(ctx, live ? "l" : "G", nx + nw - 9, ny + 6, 3, 3);
     const stillFor = st.key === "still" && S.rescue ? clock(S.rescue.facts.seconds_in_state) : "-";
     const rows = [["PERSON", st.person, st.person === "YES" ? "l" : "W"], ["MOVING", st.moving, st.moving === "YES" ? "O" : "W"],
-      ["STILL FOR", stillFor, "W"], ["BREATHING", "NOT YET", "L"],
+      ["STILL FOR", stillFor, "W"], ["BREATHING", breathing().text, breathing().col],
       ["PRIORITY", st.priority, st.priority === "1" ? "R" : st.priority === "2" ? "O" : "W"]];
     rows.forEach(([k, v, c], i) => {
-      const y = ny + 17 + i * 11;
+      const y = ny + 17 + i * 11, room = nw - 16 - textWidth(k);
+      if (textWidth(v) > room) v = v.replace(/^YES ~/, "~");          // "YES ~16/MIN" -> "~16/MIN"
+      const bold = textWidth(v, true) <= room;                       // bold when it fits, else regular
       text(ctx, k, nx + 6, y, "L");
-      text(ctx, v, nx + nw - 6 - textWidth(v, true), y, c, { bold: true });
+      text(ctx, v, nx + nw - 6 - textWidth(v, bold), y, c, { bold });
     });
     if (S.sense && S.sense.simulated) text(ctx, "DEMO DATA", nx + 6, ny + nh - 11, "Y");
 

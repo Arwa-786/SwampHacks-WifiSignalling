@@ -61,3 +61,33 @@ def test_model_round_trips_through_json(tmp_path):
     loaded, boards = bm.load(str(tmp_path / "m.json"))
     assert boards == ["a", "b", "c"]
     assert np.allclose(bm.p_breathing(model, x), bm.p_breathing(loaded, x))
+
+
+def test_live_path_matches_training_on_an_unseen_session(tmp_path):
+    """Replay a recording through BreathingLive exactly as the server receives it."""
+    from features import load_session
+
+    train = bm.session_dataset(write_session(tmp_path, "breath_01", seed=1))
+    k = train["y"] >= 0
+    bm.save(bm.train(train["x"][k], train["y"][k]), ["0000", "0001", "0002"], str(tmp_path / "m.json"))
+    live = bm.BreathingLive(str(tmp_path / "m.json"))
+    assert live.update(0.0) == {"status": "needs scan"}
+
+    files = write_session(tmp_path, "breath_02", seed=2)
+    sess = {b: load_session(f) for b, f in zip(["0000", "0001", "0002"], files)}
+    scan_end = max(bm.scan_frames(s)[0][-1] for s in sess.values())
+    events = sorted((t, b, i) for b, s in sess.items() for i, t in enumerate(s.times))
+    labels, said, scanned, nxt = sess["0000"].labels, {}, False, 0.0
+    for t, b, i in events:
+        live.push(b, t, sess[b].signal[i])
+        if not scanned and t >= scan_end:
+            live.scan(scan_end - bm.SCAN_S, scan_end)
+            scanned, nxt = True, t
+        if scanned and t >= nxt:
+            nxt = t + 2
+            lab = labels[min(int(np.searchsorted(sess["0000"].times, t)), len(labels) - 1)]
+            if lab.startswith("breath_") and t - bm.WINDOW_S > sess["0000"].times[labels.index(lab)]:
+                r = live.update(t)
+                said.setdefault("breathing", []).append(r.get("present"))
+    assert np.mean(said["breathing"]) > 0.9
+    assert live.update(t, moving=True) == {"status": "moving"}

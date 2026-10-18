@@ -37,6 +37,8 @@ FS = 20.0
 MOTION_BAND = (0.8, 3.0)  # Hz: faster than breathing = the body moving
 MIN_FILL = 0.6  # a window needs >= 60% of the packets it should have (~100/s)
 FEATURES = ["confidence", "band_power", "motion_power", "presence"]
+SCAN_S = 10.0  # the live room scan is 6-10 s of empty room; training measures its baseline the same way
+CHUNK_S = 3.0  # ...cut into 3 s pieces, so there's a typical value and a spread
 EMPTY, BREATHING = 0, 1
 CLASSES = ["EMPTY", "BREATHING"]
 
@@ -79,6 +81,22 @@ class Baseline:
         presence = np.abs(profiles - profile).mean(axis=1)
         return cls(profile, float(np.median(feats[:, 1])), float(np.median(feats[:, 2])), float(np.median(presence)))
 
+    @classmethod
+    def from_scan(cls, times: np.ndarray, sig: np.ndarray) -> "Baseline":
+        """The empty room from a short recording (the live room scan, or the last
+        SCAN_S seconds of a recording's first empty stretch), in CHUNK_S pieces."""
+        feats, profiles = [], []
+        t = times[0]
+        while t + CHUNK_S <= times[-1] + 1e-9:
+            m = (times >= t) & (times < t + CHUNK_S)
+            if m.sum() >= MIN_FILL * CHUNK_S * 100:
+                f, p, _ = raw_window(times[m], sig[m])
+                feats.append(f); profiles.append(p)
+            t += CHUNK_S
+        if len(feats) < 2:
+            raise ValueError("the empty-room scan is too short for a breathing baseline")
+        return cls.from_empty(np.array(feats), np.array(profiles))
+
     def apply(self, feats: np.ndarray, profiles: np.ndarray) -> np.ndarray:
         """Log-ratios to the empty room: 0 = like the empty room, +1 = e (2.7x) more."""
         out = np.atleast_2d(feats).astype(float).copy()
@@ -93,7 +111,21 @@ class Baseline:
                 "motion_power": self.motion_power, "presence": self.presence}
 
 
-def session_dataset(paths: list[str]) -> dict:
+def scan_frames(session) -> tuple[np.ndarray, np.ndarray]:
+    """What a live room scan would have seen in this recording: the last SCAN_S
+    seconds of the first empty stretch (by then the person has walked away)."""
+    labels = np.array(session.labels)
+    empty = np.isin(labels, ["empty", "empty_again", "empty_end"])
+    if not empty.any():
+        raise ValueError(f"{session.name}: no empty-room stretch to use as the scan")
+    first = int(np.argmax(empty))
+    end = first + int(np.argmax(~empty[first:])) if (~empty[first:]).any() else len(empty)
+    t, sig = session.times[first:end], session.signal[first:end]
+    keep = t >= t[-1] - SCAN_S
+    return t[keep], sig[keep]
+
+
+def session_dataset(paths: list[str], baseline: str = "scan") -> dict:
     """One session recorded on several boards (board order = paths order) ->
     windows on a shared time grid with every board's scaled features side by side.
     Returns t, x (n, boards*4), y (class, or -1 = not used), truth (paced rate or nan),
@@ -128,8 +160,11 @@ def session_dataset(paths: list[str]) -> dict:
         raise ValueError(f"{paths[0]}: needs some empty-room windows as the baseline")
 
     xs, conf, rates = [], [], []
-    for feats, profiles, r in per_board:
-        base = Baseline.from_empty(feats[y == EMPTY], profiles[y == EMPTY])
+    for b, (feats, profiles, r) in zip(boards, per_board):
+        # "scan": measured like the live room scan (what the server can do);
+        # "windows": every empty 15 s window (more data, but not what live has)
+        base = (Baseline.from_scan(*scan_frames(b)) if baseline == "scan"
+                else Baseline.from_empty(feats[y == EMPTY], profiles[y == EMPTY]))
         scaled = np.full_like(feats, np.nan)
         scaled[valid] = base.apply(feats[valid], profiles[valid])
         xs.append(scaled); conf.append(feats[:, 0]); rates.append(r)
@@ -170,3 +205,82 @@ def load(path: str) -> tuple[TinyMLP, list[str]]:
     for k in ("mean", "std", "w1", "b1", "w2", "b2"):
         setattr(model, k, np.array(d[k]))
     return model, d["boards"]
+
+
+# ---------------------------------------------------------------- live (the server)
+
+class BreathingLive:
+    """The breathing model on live packets. MultiReceiver pushes every board's
+    packets, calls scan() around each room scan (the baseline, measured exactly
+    like in training: Baseline.from_scan), and update() every couple of seconds.
+
+    update() answers honestly when it can't measure:
+      "no model"    no trained breathing model loaded
+      "needs scan"  no room scan since the server started (a restored scan has
+                    no breathing baseline)
+      "warming up"  less than WINDOW_S of packets since the boards started
+      "weak signal" a board delivered too few packets in the last WINDOW_S
+      "moving"      gross movement swamps breathing; ask again when still
+      "ok"          p = P(breathing), present = p >= 0.5, per_minute = median of
+                    the boards' FFT rates over RATE_WINDOW_S (only when present)
+    """
+
+    RATE_WINDOW_S = 40.0  # Gu et al. 2019, and our sessions: 40 s windows beat 30 s
+
+    def __init__(self, model_path: str | None):
+        import threading
+        from collections import deque
+
+        self.model, self.boards = load(model_path) if model_path else (None, [])
+        self.buffers: dict[str, deque] = {}
+        self.baselines: dict[str, Baseline] = {}
+        self.lock = threading.Lock()
+        self._deque = deque
+
+    def push(self, board: str | None, t: float, signal: np.ndarray) -> None:
+        if board is None:
+            return
+        with self.lock:
+            buf = self.buffers.setdefault(board, self._deque(maxlen=int((self.RATE_WINDOW_S + 5) * 110)))
+            buf.append((t, signal))
+
+    def _frames(self, board: str, t0: float, t1: float) -> tuple[np.ndarray, np.ndarray]:
+        with self.lock:
+            rows = [(t, s) for t, s in self.buffers.get(board, ()) if t0 <= t <= t1]
+        if not rows:
+            return np.empty(0), np.empty((0, 0))
+        return np.array([r[0] for r in rows]), np.array([r[1] for r in rows])
+
+    def scan(self, t0: float, t1: float) -> None:
+        """The room was empty from t0 to t1 (uptime clock): learn each board's baseline."""
+        for board in list(self.buffers):
+            t, sig = self._frames(board, max(t0, t1 - SCAN_S), t1)
+            try:
+                self.baselines[board] = Baseline.from_scan(t, sig)
+            except ValueError:
+                self.baselines.pop(board, None)
+
+    def update(self, now: float, moving: bool = False) -> dict:
+        if self.model is None:
+            return {"status": "no model"}
+        if any(b not in self.baselines for b in self.boards):
+            return {"status": "needs scan"}
+        if moving:
+            return {"status": "moving"}
+        blocks, rates = [], []
+        for board in self.boards:
+            t, sig = self._frames(board, now - self.RATE_WINDOW_S, now)
+            recent = t >= now - WINDOW_S
+            if len(t) == 0 or now - t[0] < WINDOW_S:
+                return {"status": "warming up"}
+            if recent.sum() < MIN_FILL * WINDOW_S * 100:
+                return {"status": "weak signal"}
+            f, p, _ = raw_window(t[recent], sig[recent])
+            blocks.append(self.baselines[board].apply(f, p)[0])
+            if t[-1] - t[0] >= 0.75 * self.RATE_WINDOW_S:
+                rates.append(estimate_rate(t, sig, BREATHING_BAND, FS).per_minute)
+        prob = float(p_breathing(self.model, np.concatenate(blocks))[0])
+        present = prob >= 0.5
+        rate = float(np.median(rates)) if present and rates else None
+        return {"status": "ok", "p": round(prob, 3), "present": present,
+                "per_minute": None if rate is None else round(rate, 1)}
