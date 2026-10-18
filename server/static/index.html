@@ -31,7 +31,7 @@
 </head>
 <body>
 <canvas id="screen" aria-hidden="true"></canvas>
-<a class="sr" href="/rescue">Rescue Watch</a><!-- for keyboards and screen readers; the scene draws the button -->
+<a class="sr" href="/lab">Sensing Lab</a><!-- for keyboards and screen readers; the scene draws the button -->
 <div class="sr" id="live" aria-live="polite"></div>
 
 <script src="/static/pixel.js"></script>
@@ -434,10 +434,10 @@
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   }
 
-  // "RESCUE WATCH" button, drawn in the scene's own pixels (under the legend)
+  // "SENSING LAB" button, drawn in the scene's own pixels (under the legend)
   let rescueBtn = null;
   function drawRescueButton(t) {
-    const label = "RESCUE WATCH", w = textWidth(label) + 18, h = 15;
+    const label = "SENSING LAB", w = textWidth(label) + 18, h = 15;
     const x = 4, y = W < 300 ? H - 55 : 56;
     windowBox(ctx, x, y, w, h, hoverRescue ? "T" : "D");
     text(ctx, label, x + 5, y + 4, "Y");
@@ -448,7 +448,7 @@
   let hoverRescue = false;
   const toGame = (e) => { const r = screen.getBoundingClientRect(); return [(e.clientX - r.left) / SCALE, (e.clientY - r.top) / SCALE]; };
   const onRescue = ([gx, gy]) => rescueBtn && gx >= rescueBtn.x && gx < rescueBtn.x + rescueBtn.w && gy >= rescueBtn.y && gy < rescueBtn.y + rescueBtn.h;
-  screen.addEventListener("click", (e) => { if (onRescue(toGame(e))) location.href = "/rescue"; });
+  screen.addEventListener("click", (e) => { if (onRescue(toGame(e))) location.href = "/lab"; });
   screen.addEventListener("mousemove", (e) => { hoverRescue = onRescue(toGame(e)); screen.style.cursor = hoverRescue ? "pointer" : ""; });
 
   function drawLegend() {

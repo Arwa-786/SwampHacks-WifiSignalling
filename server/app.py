@@ -227,9 +227,11 @@ def create_app(multi, store: Store | None = None, speak: bool = False, auto_scan
         """Booth operator page: room scan, board map, raw waterfalls (not for judges)."""
         return FileResponse(os.path.join(HERE, "static", "tools.html"))
 
-    @app.get("/rescue")
-    def rescue_page():
-        return FileResponse(os.path.join(HERE, "static", "rescue.html"))
+    @app.get("/lab")
+    @app.get("/rescue")  # the old name still works
+    def lab_page():
+        """The Sensing Lab: fire rescue, smart lights, hot car, home care."""
+        return FileResponse(os.path.join(HERE, "static", "lab.html"))
 
     @app.get("/api/live")
     def live(rows: int = 10):

@@ -3,9 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WiFind · Rescue Watch</title>
+<title>WiFind · Sensing Lab</title>
 <!--
-  Fire rescue mode, drawn with the same pixel engine as the swamp game (pixel.js).
+  The Sensing Lab: one Wi-Fi sensing, four uses (fire rescue, smart lights, hot car, home care),
+  drawn with the same pixel engine as the swamp game (pixel.js). /lab#lights etc. picks a use.
+  (Originally Fire rescue mode only, hence some names below.)
   A cabin is burning in the swamp at night; the front wall is cut away so you can
   see the room: the 3 Wi-Fi receivers on the left wall, the curtain, the hiding
   spot and the transmitter lantern on the right wall.
@@ -81,16 +83,36 @@
   }
 
   // Three uses of the same sensing: fire rescue, smart lights, hot car. #lights / #car in the URL.
-  const MODES = ["rescue", "lights", "car"];
+  const MODES = ["rescue", "lights", "car", "home"];
   let mode = MODES.includes(location.hash.slice(1)) ? location.hash.slice(1) : "rescue";
   addEventListener("hashchange", () => { if (MODES.includes(location.hash.slice(1))) mode = location.hash.slice(1); });
   let lastSeen = 0;            // when anyone was last seen (smart lights stay on a while after)
   const LIGHTS_GRACE_S = 20;
+  let lastMove = 0;            // when movement was last felt (home care)
+  // Home care: "check on them" after this long with no movement. 60 s so it can be shown in a
+  // demo; a real home would use something like 2 hours during the day.
+  const HOME_ALERT_S = 60;
+  const ago = (ms) => { const s_ = Math.floor(ms / 1000); return `${Math.floor(s_ / 60)}:${String(s_ % 60).padStart(2, "0")}`; };
 
   // what each mode says about the same reading: label plate, alert box, gator's line
   function view(st, t) {
     const present = st.key === "still" || st.key === "moving";
     if (present) lastSeen = t;
+    if (st.key === "moving" || !lastMove) lastMove = t;
+    if (mode === "home") {
+      const still = t - lastMove, alert = st.key === "still" && still > HOME_ALERT_S * 1000;
+      const br = breathing().text === "YES";
+      const say = !S.online ? "NO SIGNAL FROM THE HOME SENSOR."
+        : st.key === "moving" ? "THEY'RE UP AND ABOUT. ALL GOOD."
+        : alert ? `NO MOVEMENT FOR ${ago(still)}` + (br ? ", BUT BREATHING-LIKE MOTION. " : ". ") + "TIME TO CHECK ON THEM."
+        : st.key === "still" ? "RESTING" + (br ? ", BREATHING-LIKE MOTION DETECTED" : "") +
+          (still < 5000 ? ". MOVED JUST NOW." : `. LAST MOVED ${ago(still)} AGO.`)
+        : "NOBODY HOME RIGHT NOW. NO CAMERAS IN THE HOUSE.";
+      return { plate: "WIFIND HOME CARE", place: "BEDROOM", box: "STATUS",
+        value: !S.online ? "?" : alert ? "CHECK!" : present ? "OK" : "AWAY",
+        panel: alert ? "R" : present ? "g" : "G", ink: "W", flash: alert, light: present, crew: "GATOR, HOME CARE",
+        say, lastMove: present ? ago(still) : "-" };
+    }
     const breathing_ = breathing().text === "YES";
     if (mode === "lights") {
       const left = Math.max(0, Math.ceil(LIGHTS_GRACE_S - (t - lastSeen) / 1000));
@@ -152,7 +174,7 @@
     }
     for (let x = 0; x < W; x += 12) { ellipse(ctx, "K", x + 6, horizon - 10 - ((x * 7) % 7), 7, 7); rect(ctx, "K", x, horizon - 10, 14, 10); }
     const cx = 18, cy = horizon - 22;
-    if (mode === "lights") {                                           // a cabin at night, window lit or dark
+    if (mode === "lights" || mode === "home") {                        // a cabin at night, window lit or dark
       rect(ctx, "K", cx, cy, 34, 22);
       for (let r = 0; r < 9; r++) rect(ctx, "K", cx - 4 + r * 2, cy - 1 - r, 42 - r * 4, 1);
       rect(ctx, v.light ? "Y" : "D", cx + 6, cy + 6, 8, 7); rect(ctx, v.light ? "Y" : "D", cx + 20, cy + 6, 8, 7);
@@ -222,6 +244,10 @@
       if (v.light) for (let yy = room.y + 1; yy < room.y + room.h; yy++) for (let xx = room.x + 1; xx < room.x + room.w; xx++)
         if (ditherPick(xx, yy, 0.25 - Math.hypot(xx - lx, yy - ly) / (room.w * 3))) rect(ctx, "Y", xx, yy, 1, 1);
       ellipse(ctx, "K", lx, ly, 5, 3); ellipse(ctx, v.light ? "Y" : "G", lx, ly, 4, 2);
+    } else if (mode === "home") {                                     // a bedroom: bed with a pillow, a rug
+      const bx = room.x + Math.floor(room.w * 0.5), by = room.y + Math.floor(room.h * 0.25), bw = Math.floor(room.w * 0.34), bh = Math.floor(room.h * 0.5);
+      rect(ctx, "m", bx, by, bw, bh); rect(ctx, "g", bx + 1, by + 1, bw - 2, bh - 2); rect(ctx, "l", bx + bw - 6, by + 2, 4, bh - 4);
+      for (let k = 0; k < 10; k += 2) rect(ctx, "G", room.x + 10 + k * 2, room.y + room.h - 8, 2, 4);
     } else {                                                          // a car from above: body, seats
       for (let yy = room.y + 4; yy < room.y + room.h - 3; yy += 2) { rect(ctx, "G", room.x + 4, yy, 1, 1); rect(ctx, "G", room.x + room.w - 4, yy, 1, 1); }
       const seat = (fx, fy, fw, fh) => { rect(ctx, "m", room.x + Math.floor(room.w * fx), room.y + Math.floor(room.h * fy), Math.floor(room.w * fw), Math.floor(room.h * fh)); };
@@ -268,7 +294,8 @@
     const stillFor = st.key === "still" && S.rescue ? clock(S.rescue.facts.seconds_in_state) : "-";
     const br = breathing();
     const rows = [["PERSON", st.person, st.person === "YES" ? "l" : "W"], ["MOVING", st.moving, st.moving === "YES" ? "O" : "W"],
-      ["STILL", stillFor, "W"], ["BREATH", br.rate ? `~${Math.round(br.rate)}` : br.text, br.col]];
+      mode === "home" ? ["LAST MOVE", v.lastMove, "W"] : ["STILL", stillFor, "W"],
+      ["BREATH", br.rate ? `~${Math.round(br.rate)}` : br.text, br.col]];
     rows.forEach(([k, v, c], i) => {
       const ry = l.y + 5 + i * 10, room = l.w - 10 - textWidth(k);
       if (textWidth(v) > room) v = v.split(" ")[0];
@@ -323,7 +350,7 @@
     backBtn = { x: 4, y: 16, w: bw, h: 15 };
     // mode tabs: the same Wi-Fi sensing, three uses
     tabs = [];
-    [["rescue", "FIRE RESCUE"], ["lights", "SMART LIGHTS"], ["car", "HOT CAR"]].forEach(([m, name], i) => {
+    [["rescue", "FIRE RESCUE"], ["lights", "SMART LIGHTS"], ["car", "HOT CAR"], ["home", "HOME CARE"]].forEach(([m, name], i) => {
       const tw = textWidth("SMART LIGHTS") + 12, ty = 38 + i * 16;
       windowBox(ctx, 4, ty, tw, 14, m === mode ? "T" : hoverTab === m ? "G" : "D");
       text(ctx, name, 10, ty + 4, m === mode ? "Y" : "W");

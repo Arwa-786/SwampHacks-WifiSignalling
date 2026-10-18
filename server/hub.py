@@ -99,9 +99,11 @@ def create_hub(token: str | None = None) -> FastAPI:
     def index():
         return FileResponse(os.path.join(HERE, "static", "index.html"))
 
-    @app.get("/rescue")
-    def rescue_page():
-        return FileResponse(os.path.join(HERE, "static", "rescue.html"))
+    @app.get("/lab")
+    @app.get("/rescue")  # the old name still works
+    def lab_page():
+        """The Sensing Lab: fire rescue, smart lights, hot car, home care."""
+        return FileResponse(os.path.join(HERE, "static", "lab.html"))
 
     @app.api_route("/api/{path:path}", methods=["GET", "POST"])
     async def forward(path: str, request: Request):
