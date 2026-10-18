@@ -2,6 +2,7 @@
 
     cd server && python3 app.py            # then open http://localhost:8000
     python3 app.py --demo                  # no boards: fake receivers for UI work
+    python3 app.py --hub https://64-177-42-5.sslip.io   # also serve Roblox/judges via the Vultr hub (hub.py)
 
 Runs on the laptop with the RX boards plugged in. The page polls /api/live
 ~10x per second (plain HTTP, no extra libraries).
@@ -15,6 +16,8 @@ Endpoints:
   GET/POST /api/layout   board positions on the room map (dragged in the UI)
   GET  /api/sense        small Wi-Fi verdict for Roblox (polled ~4x per second)
   POST /api/phase        Roblox tells the booth the light: {"phase": "GREEN"|"RED"|...}
+  GET  /api/ai/last      the AI gator's last line and how it was made (--gator)
+  GET  /api/ai/rescue    one-sentence room status for the Fire rescue screen
 
 Roblox runs the game itself (Luau). It only needs the verdict, and it reports the
 light back so the booth speaker/LEDs (which the hidden player relies on) follow it.
@@ -30,6 +33,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections import deque
 
 import numpy as np
 import uvicorn
@@ -41,6 +45,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "sensing", "host"))
 
 from game import Game  # noqa: E402
+from gator import Gator, Voice, booth_today, rescue_template  # noqa: E402
 from store import Store  # noqa: E402
 from multi_rx import WATERFALL_ROWS, MultiReceiver  # noqa: E402
 
@@ -127,6 +132,10 @@ ROBLOX_PHASES = {"LOBBY", "GREEN", "RED", "OUT", "WON"}
 # The hidden player can't see any screen, so the light must be heard. Until the
 # booth speaker/LEDs exist, the laptop says it (macOS `say`; --speak).
 SPOKEN = {"GREEN": "Green light!", "RED": "Red light!", "OUT": "You're out! Wi-Fi caught you moving.", "WON": "You made it!"}
+SCAN_LINES = ["Please step out of the hiding spot. Scanning the room.",
+              "Someone moved during the scan. Keeping the previous scan. Next player, go in.",
+              "Room scanned. Next player, go in."]
+RECENT_S = 10.0  # motion history kept in memory for the gator's "what did the Wi-Fi see" facts
 
 
 class StartBody(BaseModel):
@@ -142,11 +151,36 @@ def default_layout(macs: list[str]) -> dict:
     return layout
 
 
-def create_app(multi, store: Store | None = None, speak: bool = False, auto_scan: bool = False) -> FastAPI:
+def motion_ratios(snap: dict) -> list[float]:
+    """Each receiver's motion as a multiple of its own still threshold."""
+    return [r["motion"] / r["motion_threshold"] if r.get("motion_threshold") else 0.0 for r in snap["receivers"]]
+
+
+def round_facts(rnd: dict, phase: str, now: float, recent) -> dict:
+    """What the gator may know about a finished round: numbers only, no names."""
+    reds = rnd.get("reds", 0)
+    facts = {"result": phase, "seconds_played": round(now - rnd.get("start", now), 1),
+             "red_lights_survived": max(reds - 1, 0) if phase == "OUT" else reds, "catch": None}
+    if phase == "OUT" and rnd.get("red_t"):
+        since_red = [ratios for t, ratios in recent if t >= rnd["red_t"]]
+        if since_red:
+            peak = np.max(since_red, axis=0)
+            facts["catch"] = {"peak_motion_x_threshold": round(float(peak.max()), 1),
+                              "receivers_that_saw_it": int((peak > 1.0).sum()),
+                              "caught_seconds_after_red_light_called": round(now - rnd["red_t"], 1)}
+    return facts
+
+
+def create_app(multi, store: Store | None = None, speak: bool = False, auto_scan: bool = False,
+               gator: Gator | None = None, voice: Voice | None = None) -> FastAPI:
+    """`gator`: AI lines after each round (None = fixed lines only).
+    `voice`: plays cached Vultr TTS recordings when present, else macOS `say`."""
     app = FastAPI(title="WiFind")
     store = store or Store()  # Tiger Data; a silent no-op without TIGER_URL
     game = Game()
-    status = {"calibrating": False, "roblox_phase": "LOBBY", "roblox_phase_t": 0.0}
+    status = {"calibrating": False, "roblox_phase": "LOBBY", "roblox_phase_t": 0.0, "round": {},
+              "state": None, "state_since": time.time(), "last_facts": None}
+    recent: deque = deque(maxlen=int(RECENT_S / TICK_S))  # (wall time, motion ratios per board)
     lock = threading.Lock()
 
     def loop():
@@ -154,7 +188,12 @@ def create_app(multi, store: Store | None = None, speak: bool = False, auto_scan
             if multi.calibrated and not status["calibrating"]:
                 with lock:
                     game.tick(time.monotonic(), multi.state())
-                store.add_snapshot(time.time(), multi.snapshot())
+                snap = multi.snapshot()
+                now = time.time()
+                recent.append((now, motion_ratios(snap)))
+                if snap["fused"] != status["state"]:
+                    status["state"], status["state_since"] = snap["fused"], now
+                store.add_snapshot(now, snap)
             time.sleep(TICK_S)
 
     threading.Thread(target=loop, daemon=True).start()
@@ -179,7 +218,19 @@ def create_app(multi, store: Store | None = None, speak: bool = False, auto_scan
 
     def say(text: str) -> None:
         if speak:
-            subprocess.Popen(["say", "-r", "220", text])
+            subprocess.Popen(voice.command(text) if voice else ["say", "-r", "220", text])
+
+    def gator_after_round(phase: str) -> None:
+        """Off the game's path: build the facts, ask the gator (it has its own
+        deadline and fallbacks), speak the line after the fixed cue."""
+        facts = round_facts(status["round"], phase, time.time(), list(recent))
+        if store.enabled:
+            try:
+                facts["booth_today"] = booth_today(store.scoreboard())
+            except Exception:
+                pass
+        status["last_facts"] = facts
+        say(gator.taunt(facts))
 
     def start_scan(seconds: float, lead_s: float = 0.0, announce: bool = False) -> bool:
         """Scan the empty room in the background. `lead_s` gives the player time
@@ -191,7 +242,7 @@ def create_app(multi, store: Store | None = None, speak: bool = False, auto_scan
         def run():
             try:
                 if announce:
-                    say("Please step out of the hiding spot. Scanning the room.")
+                    say(SCAN_LINES[0])
                 time.sleep(lead_s)
                 before = multi.scan_noise() if announce else {}
                 old_saved, old_time = dict(getattr(multi, "_saved", {})), getattr(multi, "scan_time", None)
@@ -201,11 +252,11 @@ def create_app(multi, store: Store | None = None, speak: bool = False, auto_scan
                 if announce and len(worse) >= 2:
                     multi.restore_scan(old_saved, old_time)
                     store.add_event("scan_rejected", {"before": before, "after": after})
-                    say("Someone moved during the scan. Keeping the previous scan. Next player, go in.")
+                    say(SCAN_LINES[1])
                     return
                 store.add_event("calibrated", {"seconds": seconds, "auto": announce})
                 if announce:
-                    say("Room scanned. Next player, go in.")
+                    say(SCAN_LINES[2])
             finally:
                 status["calibrating"] = False
 
@@ -248,21 +299,68 @@ def create_app(multi, store: Store | None = None, speak: bool = False, auto_scan
 
     @app.get("/api/store")
     def store_status():
-        return {"enabled": store.enabled, "queued": store._q.qsize(), "dropped": store.dropped,
-                "error": store.last_error}
+        return {"enabled": store.enabled, "written": store.written, "queued": store._q.qsize(),
+                "dropped": store.dropped, "error": store.last_error, "skipped_optional": store.skipped_optional}
+
+    # ---- Tiger Data reads (empty answers when no database is configured) ----
+    @app.get("/api/replay")
+    def replay(before: float = 6, after: float = 2):
+        """'How did it catch me?': every board's signal around the last catch."""
+        if not store.enabled:
+            return {"ok": False, "reason": "no database"}
+        moment = store.last_event("caught")
+        if not moment:
+            return {"ok": False, "reason": "nobody caught yet"}
+        return {"ok": True, "caught_at": moment[0].timestamp(), "readings": store.window(moment[0], before, after)}
+
+    @app.get("/api/history")
+    def history(minutes: float = 5):
+        return {"ok": store.enabled, "points": store.motion_history(minutes) if store.enabled else []}
+
+    @app.get("/api/timeline")
+    def timeline(minutes: float = 10):
+        return {"ok": store.enabled, "runs": store.state_timeline(minutes) if store.enabled else []}
+
+    @app.get("/api/scoreboard")
+    def scoreboard(hours: float = 24):
+        return store.scoreboard(hours) if store.enabled else {"caught": 0, "won": 0, "red_lights": 0}
+
+    @app.get("/api/storage")
+    def storage():
+        return store.storage() if store.enabled else {"rows": 0}
 
     @app.post("/api/phase")
     def set_phase(body: PhaseBody):
         phase = body.phase.upper()
         if phase not in ROBLOX_PHASES:
             return {"ok": False, "reason": "unknown phase"}
-        status["roblox_phase"], status["roblox_phase_t"] = phase, time.time()
+        now = time.time()
+        if phase == "GREEN" and status["roblox_phase"] in ("LOBBY", "OUT", "WON"):
+            status["round"] = {"start": now, "reds": 0}  # a new round begins
+        elif phase == "RED":
+            status["round"]["reds"] = status["round"].get("reds", 0) + 1
+            status["round"]["red_t"] = now
+        status["roblox_phase"], status["roblox_phase_t"] = phase, now
         store.add_event("phase", {"phase": phase, "sensed": multi.state()})
+        if phase == "OUT":  # the moment the replay looks back from
+            store.add_event("caught", {"sensed": multi.state()})
         if phase in SPOKEN:
             say(SPOKEN[phase])
+        if gator and phase in ("OUT", "WON"):
+            threading.Thread(target=gator_after_round, args=(phase,), daemon=True).start()
         if auto_scan and phase == "LOBBY":
             start_scan(AUTO_SCAN_S, AUTO_SCAN_LEAD_S, announce=True)
         return {"ok": True}
+
+    @app.get("/api/ai/last")
+    def ai_last():
+        return {"enabled": gator is not None, "facts": status["last_facts"], **(gator.last if gator else {})}
+
+    @app.get("/api/ai/rescue")
+    def ai_rescue(room: str = "Room 1"):
+        facts = {"room": room, "state": status["state"] or multi.state(),
+                 "seconds_in_state": round(time.time() - status["state_since"], 1)}
+        return {"facts": facts, "line": gator.rescue(facts) if gator else rescue_template(facts)}
 
     @app.get("/api/phase")
     def get_phase():
@@ -297,6 +395,10 @@ def main() -> None:
     parser.add_argument("--model", default=MODEL_PATH, help="fused Wi-Fi model (train_model.py --fuse)")
     parser.add_argument("--no-model", action="store_true", help="use the rule detector only")
     parser.add_argument("--speak", action="store_true", help="say red/green light out loud (booth cue)")
+    parser.add_argument("--gator", action="store_true", help="AI gator lines after each round (Vultr; needs --speak to hear them)")
+    parser.add_argument("--gator-model", default=None, help="Vultr model (default VULTR_CHAT_MODEL in .env; pick with gator_eval.py)")
+    parser.add_argument("--gator-mode", choices=["tools", "prompt"], default="tools")
+    parser.add_argument("--hub", help="Vultr hub URL to connect out to (hub.py); needs WIFIND_EDGE_TOKEN in .env")
     parser.add_argument("--auto-scan", action="store_true", help="scan the empty room whenever Roblox returns to the lobby")
     args = parser.parse_args()
 
@@ -305,7 +407,28 @@ def main() -> None:
     multi = FakeMulti() if args.demo else MultiReceiver(args.ports, model_path=model, scan_path=SCAN_PATH)
     multi.start()
     print("Open http://localhost:%d  (Scan the room first, with the area empty)" % args.port)
-    uvicorn.run(create_app(multi, speak=args.speak, auto_scan=args.auto_scan), host="0.0.0.0", port=args.port, log_level="warning")
+    voice = Voice()
+    # render the fixed cues once in the background (no-op without VULTR_TTS_MODEL/VOICE)
+    threading.Thread(target=lambda: voice.prerender(list(SPOKEN.values()) + SCAN_LINES), daemon=True).start()
+    gator = None
+    if args.gator:
+        gator = Gator(mode=args.gator_mode, **({"model": args.gator_model} if args.gator_model else {}))
+        print("AI gator:", f"{gator.model} ({gator.mode})" if gator.client.enabled else "no VULTR_INFERENCE_API_KEY, fixed lines")
+    # demo receivers are fake: keep them out of the Tiger database
+    app = create_app(multi, store=Store(enabled=not args.demo), speak=args.speak, auto_scan=args.auto_scan,
+                     gator=gator, voice=voice)
+    if args.hub:
+        import edge_bridge
+        from store import load_env
+
+        load_env()
+        token = os.environ.get("WIFIND_EDGE_TOKEN")
+        if not token:
+            raise SystemExit("--hub needs WIFIND_EDGE_TOKEN in server/.env (the same value as on the hub)")
+        hub_status = edge_bridge.start(args.hub, token, f"http://127.0.0.1:{args.port}")
+        app.get("/api/hub")(lambda: hub_status)
+        print(f"Hub: connecting out to {args.hub} (status: /api/hub)")
+    uvicorn.run(app, host="0.0.0.0", port=args.port, log_level="warning")
 
 
 if __name__ == "__main__":

@@ -2,10 +2,10 @@
 -- Every tunable number for the Roblox side lives here.
 
 return {
-	-- Public HTTPS address of the laptop server (Cloudflare Tunnel).
-	-- Roblox servers cannot reach localhost, so this must be the tunnel URL.
-	-- A quick tunnel gets a NEW url every time cloudflared restarts: update this.
-	SERVER_URL = "https://concentration-programmes-idaho-medicines.trycloudflare.com",
+	-- Public HTTPS address of the WiFind hub on the Vultr server (server/hub.py).
+	-- The booth laptop connects out to it (app.py --hub ...), so this address
+	-- never changes, whatever network the laptop is on. No tunnel needed.
+	SERVER_URL = "https://64-177-42-5.sslip.io",
 
 	POLL_S = 0.25, -- ~4 polls/s, well under Roblox's 500 requests/min limit
 	OFFLINE_AFTER_FAILS = 8, -- ~2 s of failed polls -> show "Wi-Fi offline"

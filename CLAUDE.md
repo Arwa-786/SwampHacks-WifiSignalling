@@ -145,7 +145,7 @@ Fail -> switch core sensing to HLK-LD2410 radar (keep Wi-Fi as the research piec
 ## Roblox integration details (verified against Roblox docs, Oct 2026)
 - Roblox server script polls our laptop with HttpService (GetAsync/PostAsync) ~4x per second.
 - Enable "Allow HTTP Requests" in Studio: File > Experience Settings > Security.
-- HTTPS only, must be publicly reachable (Roblox servers can't reach localhost): use Cloudflare Tunnel or ngrok.
+- HTTPS only, must be publicly reachable (Roblox servers can't reach localhost): we use the Vultr hub (see Architecture).
 - Limit: ~500 HTTP requests/minute per game server. Expect ~0.2-0.5 s delay; add a short grace period after "red light".
 - Open Cloud Messaging (push into game) is limited to ~120 messages/min per topic with 1 server and
   1 KB messages, so polling is better for live state.
@@ -160,8 +160,12 @@ ESP32 TX --Wi-Fi packets--> ESP32 RX --USB serial (CSI)--> Python on laptop
   FastAPI: /state (polled by Roblox + local screens), /command (red light from Roblox)
   WebSocket -> local web screens: game, Wi-Fi vision waterfall, leaderboard, Rescue/Guardian dashboard
   Laptop --USB serial--> ESP32 for LEDs / fan / optional servo / vibration
-  Cloudflare Tunnel -> public HTTPS for Roblox
+  Laptop dials OUT (WebSocket) -> Vultr hub https://64-177-42-5.sslip.io (server/hub.py, Caddy HTTPS)
+     Roblox + judges' dashboard talk to the hub; it answers /api/sense from memory and
+     forwards everything else to the laptop. No tunnel. Deploy: server/deploy/deploy_hub.sh
 ```
+Decided 2026-10-17: Vultr hosts the public side; sensing + the red-light decision stay on the
+laptop (boards are USB; a network hiccup must never cause a false catch).
 
 ## Open-source code to build on (all verified to exist)
 Wi-Fi CSI:
@@ -206,10 +210,34 @@ Note: the big results used special radios / multi-antenna routers, not ESP32s.
 - Possibly: elimination needs MOVING for ~0.75 s in a row during red (fewer twitch/glitch catches).
 - More hidden players: **team mode** (2-3 people in one spot; anyone moves on red -> whole team out)
   and a **player queue** (next judge's name queued, rounds back to back with auto-scan between).
-- **Zone mode (only if the zone test passes):** one hiding place next to each RX (RX ~2 m apart),
-  each player judged by "their" board. Test first: move in one zone at a time; the zone's own
-  board must react >= 2x the others every time. Fail -> team mode only. If it passes, camera
-  labels per zone train a model that separates zones.
+- **Individual players at once = zone localization (decided 2026-10-17).** Keep 1 TX + 3 RX, no
+  hardware changes (no second TX, no foil divider). Treat the 3 receivers as a spatial array:
+  the model outputs {movement, location 0=zone A..1=zone B, confidence}; a player is out only
+  if movement is located in their zone for ~0.8 s; ambiguous -> nobody out. Generalises to N zones.
+  Experiment first: `record_zones.py` (spoken script: A moves / B moves / both / both freeze,
+  `--mode solo` for one person, `--swapped` second session so it learns places, not people),
+  then `eval_zones.py` (signatures per board, held-out who-moved + location AUC, wrong-player
+  blamed must be 0). Only build game/Roblox changes if it passes.
+
+## Tiger Data showcase ideas (decided 2026-10-17)
+1. Stillness percentile: "you were stiller than 87% of SwampHacks" (toolkit percentile over every
+   player's red-light motion), shown after each round.
+2. Wi-Fi time machine in Roblox: on a catch, Roblox fetches the 8 s around it from Tiger
+   (/api/replay) and replays a ghost avatar + the 3 boards' signal graph in-game.
+3. Wi-Fi fingerprints: CSI-BERT2 embeddings (128-d per second) in pgvector; "this movement looks
+   most like..." via nearest-neighbour search.
+Also: Guardian "room memory" day strip (state_agg), and forks to re-score old games with a new model.
+
+## AI gator on Vultr Serverless Inference (decided 2026-10-17)
+- `server/gator.py`: one line after each catch/win + rescue sentence; `app.py --speak --gator`.
+  Off the red-light path, 3 s deadline, checks (length, kind words, no made-up numbers incl.
+  spelled-out ones, no "let me look up..." narration), fixed fallback lines otherwise.
+- Pick models with `server/gator_eval.py` (usable / judge-faithful / p50 / p95). Chosen:
+  `deepseek-v4.1-flash`, tool calling, `reasoning_effort: none` (reasoning on -> empty lines).
+  kimi-k2-instruct from the docs isn't offered; tool calling works on deepseek/mimo/qwen flash.
+- Fixed cues pre-rendered with `qwen3-tts-12hz-1.7b` voice `aiden` into `server/voice_cache/`
+  (returns MP3, not WAV). Config lives in `server/.env` (VULTR_*).
+- Vultr has no model for CSI: breathing, presence, posture stay our own signal processing / models.
 
 ## Experiments still to run (need the boards)
 - Paced breathing (`record_breathing.py`, then `eval_breathing.py`): true vs Wi-Fi rate + empty-room

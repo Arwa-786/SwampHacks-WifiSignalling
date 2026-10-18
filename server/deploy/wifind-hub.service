@@ -1,0 +1,16 @@
+# systemd unit for the WiFind hub on the Vultr server (installed by deploy_hub.sh)
+[Unit]
+Description=WiFind hub (public API for Roblox + dashboard; the booth laptop connects out to it)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=wifind
+WorkingDirectory=/opt/wifind/app
+EnvironmentFile=/etc/wifind.env
+ExecStart=/opt/wifind/venv/bin/uvicorn hub:app --host 127.0.0.1 --port 9000 --proxy-headers
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

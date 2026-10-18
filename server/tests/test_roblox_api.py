@@ -64,3 +64,31 @@ def test_auto_scan_spoiled_by_movement_keeps_the_previous_scan():
             break
         time.sleep(0.02)
     assert multi.restored
+
+
+def test_tiger_reads_answer_safely_without_a_database():
+    c = client()
+    assert c.get("/api/replay").json() == {"ok": False, "reason": "no database"}
+    assert c.get("/api/history").json() == {"ok": False, "points": []}
+    assert c.get("/api/timeline").json() == {"ok": False, "runs": []}
+    assert c.get("/api/scoreboard").json() == {"caught": 0, "won": 0, "red_lights": 0}
+    assert c.get("/api/storage").json() == {"rows": 0}
+
+
+def test_out_phase_records_the_catch_moment_for_the_replay():
+    class Recorder:
+        enabled = False
+
+        def __init__(self):
+            self.events = []
+
+        def add_event(self, kind, detail=None):
+            self.events.append(kind)
+
+        def add_snapshot(self, t, snap):
+            pass
+
+    rec = Recorder()
+    c = TestClient(create_app(FakeMulti(), store=rec))
+    c.post("/api/phase", json={"phase": "OUT"})
+    assert rec.events == ["phase", "caught"]
