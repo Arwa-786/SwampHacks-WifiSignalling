@@ -275,6 +275,10 @@ Also: Guardian "room memory" day strip (state_agg), and forks to re-score old ga
   it and pulses the echo at the breathing rate. Replaying breath_02 through the live path (model
   trained on breath_01 only): breathing 96% while breathing, 0% once a window is fully empty.
   Server loads sensing/host/models/breathing.json (local, not in git) when it exists.
+- Breath-hold test (breath_03, 2026-10-18, 3 holds of 18 s, still): the breathing model (trained on
+  breath_01/02) said "breathing" in 100% of hold windows (and 100% natural, 7%/0% empty). So it detects
+  a still person, not breathing itself. Keep saying "breathing-like motion"; next: train with hold
+  windows as "not breathing" (needs more hold sessions) and shorter windows than 15 s.
 - Booth motion model with phone-checked labels (phone_clean.py drops "freeze" moments where the phone
   felt movement and "move" moments where it felt stillness): booth_01+02 (behind curtain) +
   booth_03c (in front, TX 1 m behind), each held out: 87.5% accuracy, freezes 80% correct (was 47%),
