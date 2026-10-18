@@ -73,9 +73,8 @@
   function breathing() {
     const b = S.online && S.sense.breathing;
     if (!b) return { text: "?", col: "L", rate: null };
-    if (b.status === "ok") return b.present
-      ? { text: b.per_minute ? `YES ~${Math.round(b.per_minute)}/MIN` : "YES", col: "l", rate: b.per_minute }
-      : { text: "NO", col: "W", rate: null };
+    // Only yes/no: the rate (breaths per minute) was 2-4 off in our tests, so it isn't shown.
+    if (b.status === "ok") return b.present ? { text: "YES", col: "l", rate: null } : { text: "NO", col: "W", rate: null };
     const words = { "moving": "WAIT", "needs scan": "NEEDS SCAN", "warming up": "WARMING UP",
                     "weak signal": "WEAK SIGNAL", "no model": "NO MODEL" };
     return { text: words[b.status] || "?", col: "L", rate: null };
@@ -93,7 +92,7 @@
       priority: "2", say: line || "ROOM 1: SOMEONE IS INSIDE AND MOVING. PRIORITY 2." };
     if (st === "STILL") {
       const br = breathing();
-      const extra = br.rate ? ` BREATHING ABOUT ${Math.round(br.rate)} TIMES A MINUTE.` : "";
+      const extra = br.text === "YES" ? " BREATHING-LIKE MOTION DETECTED." : "";
       return { key: "still", sign: "PERSON, NOT MOVING", panel: "R", person: "YES", moving: "NO",
         priority: "1", say: (line || "ROOM 1: SOMEONE IS INSIDE AND NOT MOVING. PRIORITY 1.") + extra };
     }
