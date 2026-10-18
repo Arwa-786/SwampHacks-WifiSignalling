@@ -279,6 +279,10 @@ Also: Guardian "room memory" day strip (state_agg), and forks to re-score old ga
   breath_01/02) said "breathing" in 100% of hold windows (and 100% natural, 7%/0% empty). So it detects
   a still person, not breathing itself. Keep saying "breathing-like motion"; next: train with hold
   windows as "not breathing" (needs more hold sessions) and shorter windows than 15 s.
+  Follow-ups (breath_ratio_test.py, breath_rhythm_test.py): rhythm from in-packet subcarrier
+  ratios looked promising on rx 9294 (AUC 0.87 breath>hold, post hoc), but the pre-registered
+  check on a new session (breath_04, no curtain, 4 holds) gave 0.35; the best board changes per
+  session. No evidence yet that our CSI separates breathing from holding; claim "still person".
 - Booth motion model with phone-checked labels (phone_clean.py drops "freeze" moments where the phone
   felt movement and "move" moments where it felt stillness): booth_01+02 (behind curtain) +
   booth_03c (in front, TX 1 m behind), each held out: 87.5% accuracy, freezes 80% correct (was 47%),

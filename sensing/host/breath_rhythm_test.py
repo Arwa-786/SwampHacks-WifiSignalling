@@ -38,6 +38,15 @@ Result (2026-10-18, first run; AUC per board, breath_03 = the hold session):
     after seeing breath_03 is post hoc, so it is a lead, not a result.
   - The ~20 hold windows come from only 3 holds (overlapping windows), so the
     real sample is 3 holds. Needs more hold sessions before any claim.
+
+Pre-registered check on a NEW session (breath_04: no curtain, sitting, 4 holds,
+TX 1 m behind), test = ratio, rx 9294, breath vs hold:  0.35  -> FAILED.
+  All boards on breath_04, BREATH>HOLD: amp 0.53 / 0.18 / 0.37, ratio 0.49 / 0.35 / 0.77
+  (64dc / 9294 / fb28). The best board moved from 9294 to fb28, which is what
+  chance looks like. The old breathing model again said "breathing" in 100% of holds.
+  Conclusion: with this setup we have no evidence the CSI separates breathing from
+  breath-holding. Next ideas: boards much closer to the chest, lying down, metal
+  reflector under the TX (Gu et al.), longer holds, phone-checked holds.
 """
 
 from __future__ import annotations
@@ -99,7 +108,23 @@ def auc(a: np.ndarray, b: np.ndarray) -> float:
     return float(((a[:, None] > b[None, :]).mean() + 0.5 * (a[:, None] == b[None, :]).mean()))
 
 
+def test_session(name: str) -> None:
+    """Breath vs hold on one hold session, every board and signal."""
+    print(f"\n== {name}: breathing vs hold (pre-registered: ratio, rx 9294)")
+    for kind in ("amp", "ratio"):
+        for b in BOARDS:
+            sc, lab = board_windows(name, b, kind)
+            nat, hold, emp = sc[lab == "breath_natural"], sc[lab == "hold"], sc[np.isin(lab, EMPTY)]
+            print(f"  {kind:5s} rx {b}: BREATH>HOLD {auc(nat, hold):.2f}, breath>empty {auc(nat, emp):.2f} "
+                  f"(windows: breathing {len(nat)}, hold {len(hold)}, empty {len(emp)})")
+
+
 def main():
+    import sys
+    if len(sys.argv) > 1:  # python breath_rhythm_test.py breath_04
+        for name in sys.argv[1:]:
+            test_session(name)
+        return
     print(f"windows {WIN_S:.0f} s; AUC 0.5 = can't tell apart, 1.0 = breathing always scores higher")
     for kind in ("amp", "ratio"):
         print(f"\n== {kind}")
