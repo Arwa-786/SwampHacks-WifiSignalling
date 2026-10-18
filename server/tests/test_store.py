@@ -2,9 +2,11 @@ from store import Store, reading_rows
 
 SNAP = {
     "fused": "MOVING",
+    "detector": "ml",
+    "ml_p_moving": 0.9,
     "receivers": [
-        {"state": "MOVING", "motion": 2.0, "motion_threshold": 1.0},
-        {"state": "STILL", "motion": 0.4, "motion_threshold": 1.1},
+        {"mac": "dc:b4:d9:0b:fb:28", "state": "MOVING", "motion": 2.0, "motion_threshold": 1.0},
+        {"mac": None, "state": "STILL", "motion": 0.4, "motion_threshold": 1.1},
     ],
 }
 
@@ -33,7 +35,10 @@ class FakeConn:
 
 def test_one_row_per_receiver_with_fused_state():
     rows = reading_rows(0.0, SNAP)
-    assert [r[1:] for r in rows] == [(0, "MOVING", 2.0, 1.0, "MOVING"), (1, "STILL", 0.4, 1.1, "MOVING")]
+    assert [r[1:] for r in rows] == [
+        (0, "fb28", "MOVING", 2.0, 1.0, "MOVING", 0.9, "ml"),
+        (1, None, "STILL", 0.4, 1.1, "MOVING", 0.9, "ml"),
+    ]
 
 
 def test_without_url_store_is_a_silent_no_op(monkeypatch):

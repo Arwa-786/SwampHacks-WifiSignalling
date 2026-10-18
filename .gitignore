@@ -12,3 +12,5 @@ sensing/host/data/
 server/room_scan.json
 server/layout.json
 sensing/firmware/sdkconfig.rx_esp32
+sensing/host/.venv-ml/
+server/voice_cache/
