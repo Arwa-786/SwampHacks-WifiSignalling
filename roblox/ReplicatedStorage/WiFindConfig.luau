@@ -37,8 +37,9 @@ return {
 	RED_CALL_COOLDOWN_S = 8, -- how often online players may call red light
 
 	-- Whose avatar Wi-Fi controls: the Roblox account signed in on the booth
-	-- laptop. 0 = the first player in the server (you, in a Studio test).
-	WIFI_PLAYER_USERID = 0,
+	-- laptop (Arwa's, the experience owner). 0 = the first player in the server,
+	-- which in a public game could be a stranger.
+	WIFI_PLAYER_USERID = 11826577726,
 	RUNNER_SPEED = 6, -- studs/s the real player's avatar walks while they move
 	PLAYER_MOVE_EPS = 0.1, -- MoveDirection magnitude that counts as moving
 }
