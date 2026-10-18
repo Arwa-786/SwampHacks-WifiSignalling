@@ -94,11 +94,11 @@ def main() -> None:
             label["now"] = seg
             print(f"{seg_start:5.0f}s  {seg}", flush=True)
             if seg == "empty":
-                say("Step away from the boards for forty five seconds.")
+                say("Walk at least three meters away from the boards and stay there for forty five seconds.")
             elif seg == "empty_end":
-                say("Now step away from the boards again for thirty seconds.")
+                say("Now walk at least three meters away again, for thirty seconds.")
             elif seg == "settle":
-                say("Come back, sit still in your spot, and breathe with my voice.")
+                say("Come back to your spot behind the curtain, stay still, and breathe with my voice.")
             elif seg == "rest":
                 say("Rest. Breathe normally, stay still.")
             else:
