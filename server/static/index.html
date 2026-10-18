@@ -1,316 +1,556 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-scene="offline">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WiFind</title>
+<title>WiFind · the swamp is listening</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Gochi+Hand&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+<!--
+  The judges' page. Everything the Wi-Fi knows is drawn INTO a cartoon swamp camp:
+    3 fishing bobbers = the 3 Wi-Fi receivers (they dip when the Wi-Fi feels movement)
+    dock lantern      = the transmitter (it sends out rings)
+    the gator         = the game: naps on green, watches on red, chomps when you're caught
+  Data: /api/sense (4x/s), /api/phase (2x/s), /api/ai/last (every 2 s). Works the
+  same on the laptop and through the Vultr hub. No data = night, "Gone fishin'".
+-->
 <style>
   :root {
-    --bg: #0b0f14; --panel: #121821; --panel-2: #18202b; --line: #243042;
-    --text: #e6edf3; --muted: #8b98a8;
-    --green: #2fd27a; --red: #ff4d5e; --amber: #ffb547; --blue: #4aa8ff;
-    --radius: 14px;
+    --ink: #23301f;           /* outline colour for every drawn thing */
+    --cream: #fff4d6;
+    --paper: #fbf1d4;
+    --wood: #a8703f; --wood-dark: #7a4b25; --wood-light: #c98d55;
+    --go: #4fbf5a; --stop: #e5483d; --gold: #f5b83d;
+    --sky-top: #f3b98a; --sky-bot: #fbe4b2; --sun: #ffd36e; --sun-glow: rgba(255, 211, 110, .45);
+    --far: #8ea779; --mid: #56763f; --mid-dark: #3f5a2e; --moss: #9fae78;
+    --water-top: #5f9e8b; --water-bot: #2e6a5d; --shimmer: rgba(255, 255, 255, .35);
+    --bank: #6f8f45; --bank-dark: #55703a;
+    --night: 0; --mist: 0; --tint: rgba(0, 0, 0, 0);
   }
+  /* one mood per moment; colours ease between them */
+  [data-scene="green"] { --sky-top: #8fd3e6; --sky-bot: #e4f4d9; --sun: #ffe27a; --water-top: #4ea6a0; --water-bot: #26706a; --far: #8db57a; }
+  [data-scene="red"], [data-scene="out"] { --sky-top: #ee7f62; --sky-bot: #f8c48c; --sun: #ff9e5e; --sun-glow: rgba(255, 120, 80, .45);
+    --water-top: #6a8378; --water-bot: #34504a; --far: #8f8a68; --mid: #56653a; --tint: rgba(200, 40, 20, .08); }
+  [data-scene="won"] { --sky-top: #7468c0; --sky-bot: #f3b29e; --sun: #ffd9a0; --water-top: #5b7fa0; --water-bot: #2c4a66;
+    --far: #6f7f8a; --mid: #3f5a4a; --night: .6; }
+  [data-scene="scanning"] { --sky-top: #cfe2dd; --sky-bot: #f1f2e4; --sun: #fff6cf; --water-top: #8fb5aa; --water-bot: #4e7f73; --mist: .75; }
+  [data-scene="offline"] { --sky-top: #16223a; --sky-bot: #3a4a68; --sun: #f2efd2; --sun-glow: rgba(242, 239, 210, .25);
+    --far: #2c3d42; --mid: #22342c; --mid-dark: #182820; --moss: #4c5a48; --water-top: #1d3a42; --water-bot: #0d2228;
+    --bank: #2e4128; --bank-dark: #223220; --shimmer: rgba(220, 230, 255, .18); --night: 1; }
+
   * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 15px/1.4 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  html, body { margin: 0; height: 100%; }
+  body { background: #2a3b2a; color: var(--ink); font-family: "Nunito", system-ui, sans-serif; overflow: hidden; }
+  #swamp { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #swamp stop { transition: stop-color 1.2s ease; }
+  .fill-t { transition: fill 1.2s ease, opacity 1.2s ease; }
+
+  /* ------------------------------------------------------------ the scene */
+  .sway { transform-box: fill-box; transform-origin: 50% 100%; animation: sway 5s ease-in-out infinite alternate; }
+  @keyframes sway { from { transform: rotate(-2.2deg); } to { transform: rotate(2.2deg); } }
+  .drift { animation: drift 7s ease-in-out infinite alternate; }
+  @keyframes drift { from { transform: translateX(-14px); } to { transform: translateX(14px); } }
+  .flame { transform-box: fill-box; transform-origin: 50% 100%; animation: flicker .9s ease-in-out infinite alternate; }
+  .flame.b { animation-duration: .7s; animation-delay: -.3s; }
+  @keyframes flicker { from { transform: scale(1, .82) skewX(-4deg); } to { transform: scale(.92, 1.08) skewX(4deg); } }
+  .ring { transform-box: fill-box; transform-origin: center; animation: ring 3s ease-out infinite; opacity: 0; }
+  .ring.r2 { animation-delay: 1s; } .ring.r3 { animation-delay: 2s; }
+  @keyframes ring { 0% { transform: scale(.2); opacity: .9; } 100% { transform: scale(2.6); opacity: 0; } }
+  .firefly { animation: blink 3s ease-in-out infinite; opacity: 0; }
+  @keyframes blink { 0%, 100% { opacity: 0; } 45%, 55% { opacity: calc(.25 + var(--night) * .75); } }
+  #mist { opacity: var(--mist); transition: opacity 1.5s ease; }
+  #stars { opacity: var(--night); transition: opacity 1.5s ease; }
+  #tint { fill: var(--tint); transition: fill 1s ease; }
+
+  /* the gator: asleep (lids down) unless it's red light */
+  .lid { transform-box: fill-box; transform-origin: 50% 0; transform: scaleY(1); transition: transform .35s ease; }
+  [data-scene="lobby"] .lid, [data-scene="scanning"] .lid { transform: scaleY(.55); }
+  [data-scene="red"] .lid, [data-scene="out"] .lid { transform: scaleY(0); }
+  [data-scene="won"] .lid { transform: scaleY(.75); }
+  .shut { opacity: 0; transition: opacity .3s; }
+  [data-scene="green"] .shut, [data-scene="offline"] .shut { opacity: 1; }
+  .zzz { opacity: 0; transition: opacity .6s; }
+  [data-scene="green"] .zzz, [data-scene="offline"] .zzz { opacity: 1; }
+  .zzz text { animation: zzz 3s ease-in-out infinite; }
+  .zzz text:nth-child(2) { animation-delay: 1s; } .zzz text:nth-child(3) { animation-delay: 2s; }
+  @keyframes zzz { 0% { opacity: 0; transform: translate(0, 0); } 30% { opacity: 1; } 100% { opacity: 0; transform: translate(18px, -40px); } }
+  #gator { transition: transform .5s cubic-bezier(.3, 1.6, .5, 1); }
+  [data-scene="out"] #gator { transform: translateY(-34px); }
+  #jaw { transform-box: fill-box; transform-origin: 0% 50%; transform: rotate(0deg); transition: transform .25s ease; }
+  [data-scene="out"] #jaw { transform: rotate(14deg); }  /* hinge at the back: the snout end drops open */
+  #teeth { opacity: 0; transition: opacity .2s; }
+  [data-scene="out"] #teeth { opacity: 1; }
+  .splash { opacity: 0; }
+  [data-scene="out"] .splash { animation: splash 1.1s ease-out 1; }
+  @keyframes splash { 0% { opacity: 1; transform: translate(0, 0); } 100% { opacity: 0; transform: translate(var(--dx), -70px); } }
+
+  /* --------------------------------------------------------------- the UI */
+  .logo { position: fixed; left: 26px; top: 20px; z-index: 3; }
+  .logo h1 { margin: 0; font: 400 46px/1 "Luckiest Guy", "Nunito", sans-serif; color: var(--cream); letter-spacing: 1px;
+    -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill; text-shadow: 0 4px 0 var(--ink); transform: rotate(-3deg); }
+  .logo p { margin: 6px 0 0 6px; font: 22px/1.1 "Gochi Hand", cursive; color: var(--cream); text-shadow: 0 2px 0 rgba(0,0,0,.45); }
+
+  /* the hanging wooden sign */
+  .sign-wrap { position: fixed; left: 50%; top: 0; transform: translateX(-50%); z-index: 2; pointer-events: none; }
+  .sign { position: relative; margin-top: 58px; padding: 14px 40px 18px; min-width: 380px; text-align: center;
+    background:
+      repeating-linear-gradient(176deg, transparent 0 13px, rgba(0,0,0,.07) 13px 15px, transparent 15px 31px),
+      linear-gradient(var(--wood-light), var(--wood) 55%, var(--wood-dark));
+    border: 4px solid var(--ink); border-radius: 10px 14px 9px 16px / 14px 9px 16px 10px;
+    box-shadow: 0 7px 0 var(--ink), 0 18px 30px rgba(0,0,0,.25);
+    transform-origin: 50% -58px; animation: hang 4s ease-in-out infinite alternate; }
+  .sign.swing { animation: swing 1.2s cubic-bezier(.3, 1.4, .5, 1) 1, hang 4s ease-in-out 1.2s infinite alternate; }
+  @keyframes hang { from { transform: rotate(-1.2deg); } to { transform: rotate(1.2deg); } }
+  @keyframes swing { 0% { transform: rotate(9deg); } 40% { transform: rotate(-6deg); } 70% { transform: rotate(3deg); } 100% { transform: rotate(-1.2deg); } }
+  .sign::before, .sign::after { content: ""; position: absolute; top: -62px; width: 5px; height: 62px;
+    background: repeating-linear-gradient(160deg, #d9c08a 0 5px, #b89a5e 5px 10px); border: 1.5px solid var(--ink); }
+  .sign::before { left: 46px; } .sign::after { right: 46px; }
+  .nail { position: absolute; top: 8px; width: 11px; height: 11px; border-radius: 50%; background: #5d5a55; border: 2px solid var(--ink); }
+  .nail.l { left: 40px; } .nail.r { right: 40px; }
+  .sign h2 { margin: 0; font: 400 clamp(40px, 6.4vw, 78px)/1 "Luckiest Guy", "Nunito", sans-serif; letter-spacing: 1px;
+    color: var(--cream); -webkit-text-stroke: 3px var(--ink); paint-order: stroke fill; text-shadow: 0 5px 0 var(--ink); }
+  [data-scene="green"] .sign h2 { color: #9be86f; }
+  [data-scene="red"] .sign h2, [data-scene="out"] .sign h2 { color: #ff7a5c; }
+  [data-scene="won"] .sign h2 { color: #ffd76a; }
+  .sign .sub { margin-top: 6px; font: 26px/1.1 "Gochi Hand", cursive; color: #fff1cf; text-shadow: 0 2px 0 rgba(35,48,31,.8); }
+
+  /* taped-on field notes */
+  .notes { position: fixed; right: 26px; top: 120px; width: 272px; z-index: 2; padding: 30px 24px 22px;
+    background: repeating-linear-gradient(transparent 0 33px, rgba(80, 120, 160, .22) 33px 35px), var(--paper);
+    border: 3px solid var(--ink); border-radius: 4px 10px 6px 12px; transform: rotate(2.2deg);
+    box-shadow: 6px 8px 0 rgba(35,48,31,.55); font-family: "Gochi Hand", cursive; }
+  .notes::before { content: ""; position: absolute; top: -16px; left: 50%; width: 110px; height: 30px; transform: translateX(-50%) rotate(-4deg);
+    background: rgba(244, 221, 140, .85); border: 1.5px dashed rgba(35,48,31,.35); }
+  .notes h3 { margin: 0 0 4px; font: 400 26px/1 "Luckiest Guy", sans-serif; color: var(--wood-dark); letter-spacing: .5px; }
+  .notes .label { font-size: 20px; color: #5b5240; margin-top: 10px; }
+  .notes .big { font-size: 34px; line-height: 1.05; color: var(--ink); }
+  .notes .big.moving { color: var(--stop); } .notes .big.still { color: #3d8a43; }
+  .meter { position: relative; height: 26px; margin-top: 6px; border: 3px solid var(--ink); border-radius: 14px 10px 13px 9px; background: #fff8e6; overflow: hidden; }
+  .meter i { position: absolute; inset: 0 auto 0 0; width: 0; background: repeating-linear-gradient(-45deg, var(--go) 0 10px, #43a94d 10px 20px); transition: width .25s ease; }
+  .meter.hot i { background: repeating-linear-gradient(-45deg, var(--stop) 0 10px, #c93b31 10px 20px); }
+  .meter b { position: absolute; top: -4px; bottom: -4px; width: 3px; background: var(--ink); }
+  .meter-note { font-size: 16px; color: #6d644f; display: flex; justify-content: space-between; }
+  .quote { margin-top: 6px; font-size: 22px; line-height: 1.15; color: #3e3626; min-height: 52px; }
+
+  /* the gator's speech bubble (placed next to the gator by JS) */
+  .bubble { position: fixed; z-index: 3; max-width: 330px; padding: 12px 16px; background: #fffdf3; border: 3px solid var(--ink);
+    border-radius: 22px 18px 24px 16px; box-shadow: 4px 5px 0 var(--ink); font: 23px/1.15 "Gochi Hand", cursive;
+    opacity: 0; transform: scale(.6) translateY(10px); transform-origin: 20% 100%; transition: opacity .25s, transform .3s cubic-bezier(.3,1.6,.5,1); pointer-events: none; }
+  .bubble.show { opacity: 1; transform: none; }
+  .bubble::after { content: ""; position: absolute; left: 34px; bottom: -18px; width: 22px; height: 22px; background: #fffdf3;
+    border-right: 3px solid var(--ink); border-bottom: 3px solid var(--ink); transform: skewX(30deg) rotate(45deg); }
+
+  /* how-to-read note and status tag */
+  .legend { position: fixed; left: 26px; top: 128px; z-index: 2; width: 300px; padding: 14px 16px 12px; background: var(--paper);
+    border: 3px solid var(--ink); border-radius: 12px 6px 14px 8px; transform: rotate(-1.6deg); box-shadow: 5px 6px 0 rgba(35,48,31,.55);
+    font: 19px/1.2 "Gochi Hand", cursive; color: #3e3626; }
+  .legend div { display: flex; gap: 10px; align-items: center; margin: 4px 0; }
+  .legend svg { flex: 0 0 auto; }
+  .status { position: fixed; right: 26px; bottom: 22px; z-index: 2; padding: 8px 16px; background: var(--wood);
+    border: 3px solid var(--ink); border-radius: 10px 14px 8px 12px; box-shadow: 0 4px 0 var(--ink);
+    font: 400 18px/1 "Luckiest Guy", sans-serif; color: var(--cream); letter-spacing: .5px; display: flex; align-items: center; gap: 9px; }
+  .status .dot { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--ink); background: #8a8a8a; }
+  .status.live .dot { background: #7be36b; animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 6px rgba(123, 227, 107, .25); } }
+
+  @media (max-width: 900px) {
+    .logo { left: 16px; top: 12px; } .logo h1 { font-size: 30px; } .logo p { display: none; }
+    .sign-wrap { width: calc(100vw - 32px); }
+    .sign { min-width: 0; padding: 10px 16px 12px; margin-top: 66px; }
+    .sign h2 { font-size: clamp(30px, 10vw, 56px); } .sign .sub { font-size: 19px; }
+    .sign::before { left: 26px; } .sign::after { right: 26px; } .nail.l { left: 20px; } .nail.r { right: 20px; }
+    /* compact notes strip at the bottom: what the Wi-Fi feels + the meter */
+    .notes { top: auto; bottom: 64px; right: 16px; left: 16px; width: auto; transform: rotate(-.6deg); padding: 16px 16px 10px; }
+    .notes h3, .notes .label, #clock, .quote { display: none; }
+    .notes .big { font-size: 26px; }
+    .legend { display: none; }
+    .status { right: 16px; bottom: 14px; }
+    .bubble { max-width: calc(100vw - 32px); left: 16px !important; }
   }
-  header {
-    display: flex; align-items: center; gap: 16px; padding: 14px 20px;
-    border-bottom: 1px solid var(--line); flex-wrap: wrap;
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
   }
-  .logo { font-weight: 800; font-size: 20px; letter-spacing: .5px; }
-  .logo span { color: var(--blue); }
-  .verdict {
-    margin-left: auto; padding: 8px 18px; border-radius: 999px; font-weight: 800;
-    font-size: 18px; letter-spacing: 1px; background: var(--panel-2); border: 1px solid var(--line);
-    min-width: 130px; text-align: center; transition: background .2s, color .2s;
-  }
-  .verdict.MOVING { background: var(--red); color: #fff; border-color: var(--red); }
-  .verdict.STILL { background: var(--amber); color: #111; border-color: var(--amber); }
-  button {
-    font: inherit; font-weight: 700; border: 0; border-radius: 10px; padding: 10px 16px;
-    cursor: pointer; background: var(--blue); color: #fff;
-  }
-  button.secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); }
-  button.danger { background: var(--red); }
-  button:disabled { opacity: .45; cursor: default; }
-  .status { color: var(--muted); font-size: 13px; }
-  main {
-    display: grid; gap: 16px; padding: 16px 20px;
-    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
-  }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
-  .panel h2 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); }
-  #map { width: 100%; aspect-ratio: 4 / 3; display: block; border-radius: 10px; background: var(--panel-2); touch-action: none; }
-  .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
-  /* game */
-  .light {
-    height: 120px; border-radius: 12px; display: grid; place-items: center;
-    font-size: 34px; font-weight: 900; letter-spacing: 2px; background: var(--panel-2);
-    transition: background .25s;
-  }
-  .light.GREEN { background: var(--green); color: #062; }
-  .light.RED { background: var(--red); color: #fff; }
-  .light.OUT { background: #3a1016; color: var(--red); }
-  .light.WON { background: #0d3320; color: var(--green); }
-  .bar { height: 14px; background: var(--panel-2); border-radius: 999px; overflow: hidden; margin: 12px 0 4px; }
-  .bar > div { height: 100%; width: 0; background: var(--green); transition: width .15s; }
-  .row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-  .row input {
-    flex: 1; min-width: 120px; font: inherit; padding: 10px 12px; border-radius: 10px;
-    border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
-  }
-  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
-  .stat { background: var(--panel-2); border-radius: 10px; padding: 8px 10px; }
-  .stat b { display: block; font-size: 20px; }
-  .stat small { color: var(--muted); }
-  #events { margin: 12px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: 13px; }
-  #events li { padding: 4px 0; border-bottom: 1px solid var(--line); }
-  /* receivers */
-  .receivers { grid-column: 1 / -1; display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-  .rx-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-  .chip { margin-left: auto; font-size: 12px; font-weight: 800; padding: 3px 10px; border-radius: 999px; background: var(--panel-2); }
-  .chip.MOVING { background: var(--red); }
-  .chip.STILL { background: var(--amber); color: #111; }
-  .chip.DEAD { background: #333; color: var(--muted); }
-  .rx canvas { width: 100%; height: 170px; display: block; border-radius: 8px; image-rendering: pixelated; background: #000; }
-  .meter { position: relative; height: 8px; background: var(--panel-2); border-radius: 999px; margin-top: 10px; overflow: hidden; }
-  .meter > div { height: 100%; width: 0; background: var(--blue); transition: width .1s; }
-  .meter::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--text); opacity: .6; }
-  .rx-meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 6px; }
-  @media (max-width: 860px) { main { grid-template-columns: 1fr; padding: 12px 16px; } header { padding: 12px 16px; } }
 </style>
 </head>
 <body>
-<header>
-  <div class="logo">Wi<span>Find</span></div>
-  <button id="scan" class="secondary">Scan the room</button>
-  <span id="status" class="status">Connecting…</span>
-  <div id="verdict" class="verdict">—</div>
+
+<svg id="swamp" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+  <defs>
+    <!-- hand-drawn wobble: nudges every edge a little, so nothing looks machine-perfect -->
+    <filter id="wobble" x="-5%" y="-5%" width="110%" height="110%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="2" seed="7" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="5"/>
+    </filter>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" style="stop-color: var(--sky-top)"/><stop offset="1" style="stop-color: var(--sky-bot)"/>
+    </linearGradient>
+    <linearGradient id="water" gradientUnits="userSpaceOnUse" x1="0" y1="556" x2="0" y2="900">
+      <stop offset="0" style="stop-color: var(--water-top)"/><stop offset="1" style="stop-color: var(--water-bot)"/>
+    </linearGradient>
+    <radialGradient id="glow"><stop offset="0" stop-color="#ffd27a" stop-opacity=".85"/><stop offset="1" stop-color="#ffd27a" stop-opacity="0"/></radialGradient>
+    <radialGradient id="sunglow"><stop offset="0" style="stop-color: var(--sun-glow)"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#sky)"/>
+  <g id="stars"></g>
+  <circle cx="520" cy="330" r="150" fill="url(#sunglow)"/>
+  <circle cx="520" cy="330" r="56" class="fill-t" style="fill: var(--sun)" stroke="var(--ink)" stroke-width="4" filter="url(#wobble)"/>
+  <g class="drift" opacity=".9">
+    <path transform="translate(1000 -96)" d="M180 150c10-26 52-30 66-6 14-20 52-14 56 12 26 0 34 30 10 38H170c-26-4-22-40 10-44z" fill="#fff8ea" stroke="var(--ink)" stroke-width="4" filter="url(#wobble)"/>
+    <path transform="translate(-330 230)" d="M760 110c8-20 40-24 52-5 11-15 40-11 44 9 20 0 26 24 8 30H752c-20-3-17-31 8-34z" fill="#fff8ea" stroke="var(--ink)" stroke-width="4" filter="url(#wobble)"/>
+  </g>
+
+  <g id="far" filter="url(#wobble)"></g>
+  <g id="mid" filter="url(#wobble)"></g>
+
+  <!-- the water -->
+  <path d="M0 560 Q 400 548 800 560 T 1600 556 V 900 H 0 Z" fill="url(#water)" stroke="var(--ink)" stroke-width="4"/>
+  <g id="shimmer" class="drift" stroke="var(--shimmer)" stroke-width="4" stroke-linecap="round"></g>
+
+  <!-- left bank: tent + campfire -->
+  <g filter="url(#wobble)">
+    <path d="M-20 530 C 120 490 360 500 560 560 C 520 600 300 610 -20 612 Z" class="fill-t" style="fill: var(--bank)" stroke="var(--ink)" stroke-width="4"/>
+    <path d="M-20 590 C 160 580 330 590 470 588" fill="none" style="stroke: var(--bank-dark)" stroke-width="6" stroke-linecap="round"/>
+    <path d="M120 528 L 220 400 L 320 528 Z" fill="#e8a23c" stroke="var(--ink)" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M220 400 L 196 528 L 244 528 Z" fill="#b8722a" stroke="var(--ink)" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M220 400 L 220 372 L 252 382 L 220 392" fill="#e5483d" stroke="var(--ink)" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M360 552 l 62 -16 M 364 536 l 58 18" stroke="#6b3f1f" stroke-width="12" stroke-linecap="round"/>
+    <path d="M360 552 l 62 -16 M 364 536 l 58 18" stroke="var(--ink)" stroke-width="3" stroke-linecap="round" fill="none" opacity=".5"/>
+  </g>
+  <circle cx="392" cy="520" r="70" fill="url(#glow)"/>
+  <path class="flame" d="M392 540 C 368 520 378 494 392 470 C 404 492 418 518 392 540 Z" fill="#f5b83d" stroke="var(--ink)" stroke-width="3.5"/>
+  <path class="flame b" d="M392 538 C 380 526 384 510 392 496 C 400 510 404 526 392 538 Z" fill="#fff0a8"/>
+
+  <!-- right dock + lantern (the transmitter) -->
+  <g filter="url(#wobble)">
+    <rect x="1060" y="586" width="560" height="22" rx="4" fill="#a8703f" stroke="var(--ink)" stroke-width="4"/>
+    <path d="M1105 586 v 22 M 1150 586 v 22 M 1205 586 v 22 M 1250 586 v 22 M 1295 586 v 22 M 1340 586 v 22 M 1385 586 v 22 M 1430 586 v 22 M 1475 586 v 22 M 1520 586 v 22 M 1565 586 v 22" stroke="var(--ink)" stroke-width="2.5" opacity=".6"/>
+    <rect x="1086" y="440" width="22" height="210" rx="4" fill="#8a5a30" stroke="var(--ink)" stroke-width="4"/>
+    <rect x="1470" y="572" width="20" height="90" rx="4" fill="#8a5a30" stroke="var(--ink)" stroke-width="4"/>
+    <path d="M1097 452 h 52 v 18" fill="none" stroke="var(--ink)" stroke-width="5" stroke-linecap="round"/>
+  </g>
+  <g id="lantern">
+    <circle cx="1149" cy="500" r="80" fill="url(#glow)"/>
+    <circle class="ring" cx="1149" cy="500" r="36" fill="none" stroke="#ffe7a3" stroke-width="3"/>
+    <circle class="ring r2" cx="1149" cy="500" r="36" fill="none" stroke="#ffe7a3" stroke-width="3"/>
+    <circle class="ring r3" cx="1149" cy="500" r="36" fill="none" stroke="#ffe7a3" stroke-width="3"/>
+    <path d="M1136 474 h 26 l 6 10 v 32 l -6 8 h -26 l -6 -8 v -32 z" fill="#ffd96e" stroke="var(--ink)" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M1134 484 h 30 M 1134 514 h 30" stroke="var(--ink)" stroke-width="3"/>
+  </g>
+
+  <!-- lily pads -->
+  <g filter="url(#wobble)" stroke="var(--ink)" stroke-width="3.5">
+    <path d="M640 760 a 46 18 0 1 0 40 -12 l -40 12 z" fill="#6fae4f"/>
+    <path d="M940 812 a 56 21 0 1 1 -46 -14 l 46 14 z" fill="#5f9f45"/>
+    <path d="M1380 724 a 40 15 0 1 0 34 -10 l -34 10 z" fill="#6fae4f"/>
+    <path d="M928 796 c -8 -22 4 -30 12 -20 c 6 -14 22 -8 16 8 c 14 -2 16 14 2 18 z" fill="#f4a6b8"/>
+  </g>
+
+  <!-- the 3 bobbers (= the 3 Wi-Fi receivers); JS moves them -->
+  <g id="bobbers"></g>
+
+  <!-- the gator -->
+  <g id="gator">
+    <g filter="url(#wobble)" stroke="var(--ink)" stroke-width="4" stroke-linejoin="round">
+      <path id="jaw" d="M300 742 C 360 752 470 750 528 736 C 520 760 470 774 380 770 C 330 768 304 760 300 742 Z" fill="#4d8a3c"/>
+      <g id="teeth" fill="#fffbe8" stroke-width="2.5">
+        <path d="M360 744 l 8 14 l 8 -14 z M 400 746 l 8 14 l 8 -14 z M 440 744 l 8 14 l 8 -14 z M 480 740 l 8 13 l 8 -13 z"/>
+      </g>
+      <path d="M270 744 C 280 700 340 686 420 690 C 480 692 524 706 540 728 C 520 742 470 744 400 744 C 340 744 296 748 270 744 Z" fill="#5ea047"/>
+      <path d="M196 742 l 12 -16 l 12 16 M 226 744 l 12 -18 l 12 18 M 256 744 l 11 -15 l 11 15" fill="#4d8a3c"/>
+      <path d="M320 700 c 14 -6 26 -6 38 -2 M 380 694 c 14 -4 26 -4 38 0" fill="none" stroke-width="3" opacity=".55"/>
+      <circle cx="522" cy="716" r="4" fill="var(--ink)"/>
+      <circle cx="534" cy="720" r="3.5" fill="var(--ink)"/>
+      <!-- eyes -->
+      <ellipse cx="330" cy="684" rx="26" ry="24" fill="#5ea047"/>
+      <ellipse cx="392" cy="680" rx="26" ry="24" fill="#5ea047"/>
+    </g>
+    <g stroke="var(--ink)" stroke-width="3">
+      <circle cx="330" cy="680" r="15" fill="#fff6c9"/>
+      <circle cx="392" cy="676" r="15" fill="#fff6c9"/>
+      <ellipse class="pupil" cx="330" cy="680" rx="4" ry="10" fill="var(--ink)" stroke="none"/>
+      <ellipse class="pupil" cx="392" cy="676" rx="4" ry="10" fill="var(--ink)" stroke="none"/>
+      <path class="lid" d="M314 680 a 16 16 0 1 0 32 0 a 16 16 0 1 0 -32 0 z" fill="#4d8a3c"/>
+      <path class="lid" d="M376 676 a 16 16 0 1 0 32 0 a 16 16 0 1 0 -32 0 z" fill="#4d8a3c"/>
+      <path class="shut" d="M319 684 q 11 8 22 0 M 381 680 q 11 8 22 0" fill="none" stroke-width="3.5" stroke-linecap="round"/>
+    </g>
+    <g class="zzz" font-family="Luckiest Guy, sans-serif" fill="var(--cream)" stroke="var(--ink)" stroke-width="2" paint-order="stroke">
+      <text x="420" y="640" font-size="30">z</text><text x="440" y="616" font-size="24">z</text><text x="456" y="596" font-size="18">z</text>
+    </g>
+    <!-- splash droplets for a catch -->
+    <g fill="#bfe8ee" stroke="var(--ink)" stroke-width="2.5">
+      <circle class="splash" cx="300" cy="730" r="9" style="--dx:-50px"/><circle class="splash" cx="350" cy="720" r="7" style="--dx:-20px"/>
+      <circle class="splash" cx="470" cy="722" r="8" style="--dx:30px"/><circle class="splash" cx="530" cy="730" r="10" style="--dx:60px"/>
+    </g>
+  </g>
+  <!-- water line over the gator's belly, so it sits IN the swamp -->
+  <path d="M180 748 C 320 740 470 742 560 748 L 560 792 L 180 792 Z" fill="url(#water)"/>
+  <path d="M186 748 C 330 740 470 742 556 748" fill="none" stroke="var(--shimmer)" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- foreground cattails -->
+  <g id="reeds" stroke="var(--ink)" stroke-width="3.5" stroke-linecap="round"></g>
+
+  <g id="flies" fill="#fff59a"></g>
+  <rect id="mist" x="0" y="380" width="1600" height="320" fill="#f6f7ee" opacity="0" filter="url(#wobble)"/>
+  <rect id="tint" width="1600" height="900" pointer-events="none"/>
+</svg>
+
+<header class="logo">
+  <h1>WiFind</h1>
+  <p>the swamp can feel you move</p>
 </header>
 
-<main>
-  <section class="panel">
-    <h2>Room · where the Wi-Fi sees movement</h2>
-    <canvas id="map" width="800" height="600"></canvas>
-    <div class="hint">Drag the boards to where they really are. Glowing lines = disturbed links; the heat shows roughly where.</div>
-  </section>
+<div class="sign-wrap">
+  <div class="sign" id="sign">
+    <span class="nail l"></span><span class="nail r"></span>
+    <h2 id="signText">Gone fishin'</h2>
+    <div class="sub" id="signSub">the booth laptop is napping</div>
+  </div>
+</div>
 
-  <section class="panel">
-    <h2>Red Light, Green Light</h2>
-    <div id="light" class="light">READY</div>
-    <div class="bar"><div id="progress"></div></div>
-    <div class="status" id="phase-left">Scan the room, then start a round.</div>
-    <div class="row">
-      <input id="player" maxlength="20" placeholder="Nickname" autocomplete="off">
-      <button id="start">Start</button>
-      <button id="red" class="danger">Red light!</button>
-    </div>
-    <div class="stats">
-      <div class="stat"><b id="survival">0.0s</b><small>survived</small></div>
-      <div class="stat"><b id="stillness">—</b><small>stillness on red</small></div>
-      <div class="stat"><b id="sensed">—</b><small>Wi-Fi says</small></div>
-    </div>
-    <ul id="events"></ul>
-  </section>
+<aside class="notes" aria-live="polite">
+  <h3>Field notes</h3>
+  <div class="label">the Wi-Fi feels…</div>
+  <div class="big" id="feels">nothing yet</div>
+  <div class="label">wiggle-o-meter</div>
+  <div class="meter" id="meter"><i id="meterFill"></i><b id="meterTick"></b></div>
+  <div class="meter-note"><span>still as a log</span><span>freeze line ↑</span><span>splashing</span></div>
+  <div class="label">this round</div>
+  <div class="big" id="clock">–</div>
+  <div class="label">the gator says</div>
+  <div class="quote" id="quote">“Shh. I'm resting my eyes.”</div>
+</aside>
 
-  <section class="receivers" id="receivers"></section>
-</main>
+<div class="bubble" id="bubble"></div>
+
+<aside class="legend">
+  <div>
+    <svg width="34" height="38" viewBox="0 0 34 38"><path d="M17 2v8" stroke="#23301f" stroke-width="3"/><circle cx="17" cy="22" r="13" fill="#fff" stroke="#23301f" stroke-width="3"/><path d="M4 22a13 13 0 0 1 26 0z" fill="#e5483d" stroke="#23301f" stroke-width="3"/></svg>
+    <span>each bobber is a Wi-Fi receiver. It dips when the Wi-Fi feels you move.</span>
+  </div>
+  <div>
+    <svg width="34" height="38" viewBox="0 0 34 38"><path d="M9 6h16l4 6v18l-4 5H9l-4-5V12z" fill="#ffd96e" stroke="#23301f" stroke-width="3"/></svg>
+    <span>the lantern is the transmitter. No camera anywhere.</span>
+  </div>
+</aside>
+
+<div class="status" id="status"><span class="dot"></span><span id="statusText">booth is napping</span></div>
 
 <script>
-const $ = (id) => document.getElementById(id);
-const api = (path, opts) => fetch(path, opts).then((r) => r.json());
-const post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
-
-// ---------------------------------------------------------------- colormap
-// Dark blue -> purple -> orange -> pale yellow, for normalized amplitude 0.4..1.6.
-const STOPS = [[0, [8, 10, 40]], [0.35, [80, 30, 140]], [0.65, [230, 90, 60]], [1, [255, 240, 170]]];
-function colorFor(v) {
-  const x = Math.min(1, Math.max(0, (v - 0.4) / 1.2));
-  for (let i = 1; i < STOPS.length; i++) {
-    if (x <= STOPS[i][0]) {
-      const [x0, c0] = STOPS[i - 1], [x1, c1] = STOPS[i];
-      const f = (x - x0) / (x1 - x0);
-      return c0.map((c, k) => Math.round(c + f * (c1[k] - c)));
-    }
-  }
-  return STOPS[STOPS.length - 1][1];
-}
-
-// ------------------------------------------------------------- receivers
-const rxViews = []; // {root, canvas, ctx, ...}
-function ensureReceiverViews(receivers) {
-  const box = $("receivers");
-  while (rxViews.length < receivers.length) {
-    const i = rxViews.length;
-    const root = document.createElement("div");
-    root.className = "panel rx";
-    root.innerHTML = `
-      <div class="rx-head"><h2 style="margin:0">Receiver ${i + 1}</h2><span class="status mac"></span><span class="chip">—</span></div>
-      <canvas width="51" height="200"></canvas>
-      <div class="meter"><div></div></div>
-      <div class="rx-meta"><span class="rssi"></span><span class="smooth"></span><span class="pps"></span></div>`;
-    box.appendChild(root);
-    const canvas = root.querySelector("canvas");
-    rxViews.push({ root, canvas, ctx: canvas.getContext("2d") });
-  }
-}
-
-function drawWaterfall(view, rows) {
-  if (!rows.length) return;
-  const { ctx, canvas } = view;
-  const n = rows.length, w = canvas.width, h = canvas.height;
-  ctx.drawImage(canvas, 0, n, w, h - n, 0, 0, w, h - n); // scroll up
-  const img = ctx.createImageData(w, n);
-  rows.forEach((row, r) => row.forEach((v, c) => {
-    const [R, G, B] = colorFor(v), p = (r * w + c) * 4;
-    img.data[p] = R; img.data[p + 1] = G; img.data[p + 2] = B; img.data[p + 3] = 255;
-  }));
-  ctx.putImageData(img, 0, h - n);
-}
-
-function updateReceiver(view, r, i) {
-  const q = (s) => view.root.querySelector(s);
-  const label = r.alive ? r.state : "DEAD";
-  q(".chip").textContent = r.alive ? r.state : "NO DATA";
-  q(".chip").className = "chip " + label;
-  q(".mac").textContent = r.mac ? r.mac.slice(-5) : r.port;
-  const ratio = r.motion_threshold ? r.motion / r.motion_threshold : 0;
-  q(".meter > div").style.width = Math.min(100, ratio * 50) + "%"; // threshold sits at the middle line
-  q(".meter > div").style.background = ratio > 1 ? "var(--red)" : "var(--blue)";
-  q(".rssi").textContent = `${r.rssi} dBm`;
-  q(".smooth").textContent = `smooth ${r.smoothness.toFixed(2)}`;
-  q(".pps").textContent = `${Math.round(r.packets_per_s)} pkt/s`;
-  drawWaterfall(view, r.waterfall);
-}
-
-// ------------------------------------------------------------------- map
-let layout = null, lastReceivers = [];
-const map = $("map"), mctx = map.getContext("2d");
-const toPx = (p) => [p.x / layout.room.w * map.width, p.y / layout.room.h * map.height];
-const toM = (x, y) => ({ x: +(x / map.width * layout.room.w).toFixed(2), y: +(y / map.height * layout.room.h).toFixed(2) });
-
-// Radio tomographic imaging, simplest form: each link "owns" an ellipse
-// around the TX->RX line (extra path length < ~0.25 m); a disturbed link
-// lights up its ellipse, and overlapping ellipses add up.
-const heat = document.createElement("canvas"); // low-res heat, scaled up smoothly
-heat.width = 80; heat.height = 60;
-const hctx = heat.getContext("2d");
-function drawMap() {
-  if (!layout) return;
-  const W = map.width, H = map.height;
-  mctx.clearRect(0, 0, W, H);
-  const links = lastReceivers.map((r) => {
-    const pos = layout.rx[r.mac || r.port];
-    const d = r.motion_threshold && r.alive ? Math.max(0, r.motion / r.motion_threshold - 0.6) : 0;
-    return pos ? { pos, d: Math.min(d, 3) } : null;
-  }).filter(Boolean);
-  const tx = layout.tx;
-  const img = hctx.createImageData(heat.width, heat.height);
-  for (let j = 0; j < heat.height; j++) for (let i = 0; i < heat.width; i++) {
-    const p = { x: (i + 0.5) / heat.width * layout.room.w, y: (j + 0.5) / heat.height * layout.room.h };
-    let num = 0, den = 0.35;
-    for (const l of links) {
-      const excess = Math.hypot(p.x - tx.x, p.y - tx.y) + Math.hypot(p.x - l.pos.x, p.y - l.pos.y) - Math.hypot(l.pos.x - tx.x, l.pos.y - tx.y);
-      const w = Math.exp(-(excess * excess) / (2 * 0.12 * 0.12));
-      num += w * l.d; den += w;
-    }
-    const v = Math.min(1, num / den / 1.5), k = (j * heat.width + i) * 4;
-    img.data[k] = 255; img.data[k + 1] = Math.round(170 - 120 * v); img.data[k + 2] = 70;
-    img.data[k + 3] = Math.round(200 * v * v);
-  }
-  hctx.putImageData(img, 0, 0);
-  mctx.imageSmoothingEnabled = true;
-  mctx.drawImage(heat, 0, 0, W, H);
-  const [tx0, ty0] = toPx(tx);
-  links.forEach((l) => {
-    const [x1, y1] = toPx(l.pos);
-    mctx.strokeStyle = l.d > 0.4 ? "rgba(255,77,94,.95)" : "rgba(74,168,255,.55)";
-    mctx.lineWidth = 2 + 4 * Math.min(1, l.d);
-    mctx.setLineDash(l.d > 0.4 ? [] : [6, 6]);
-    mctx.beginPath(); mctx.moveTo(tx0, ty0); mctx.lineTo(x1, y1); mctx.stroke();
-  });
-  mctx.setLineDash([]);
-  const dot = (x, y, color, text) => {
-    mctx.fillStyle = color; mctx.beginPath(); mctx.arc(x, y, 14, 0, 7); mctx.fill();
-    mctx.fillStyle = "#0b0f14"; mctx.font = "bold 12px sans-serif"; mctx.textAlign = "center"; mctx.textBaseline = "middle";
-    mctx.fillText(text, x, y);
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const NS = "http://www.w3.org/2000/svg";
+  const root = document.documentElement;
+  const el = (tag, attrs, parent) => {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(n);
+    return n;
   };
-  dot(tx0, ty0, "#e6edf3", "TX");
-  lastReceivers.forEach((r, i) => {
-    const pos = layout.rx[r.mac || r.port];
-    if (pos) { const [x, y] = toPx(pos); dot(x, y, r.alive ? "#4aa8ff" : "#555", "R" + (i + 1)); }
+  // seeded random, so the swamp looks the same on every load (hand-placed, not shuffling)
+  let seed = 11;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+
+  // ---------------------------------------------------------------- draw the swamp
+  function cypress(g, x, base, h, w, fill, mossy) {
+    const top = base - h;
+    el("path", { d: `M${x - w * .5} ${base} C ${x - w * .2} ${base - h * .25} ${x - w * .12} ${top + h * .4} ${x - w * .08} ${top + 30}
+      L ${x + w * .08} ${top + 30} C ${x + w * .12} ${top + h * .4} ${x + w * .2} ${base - h * .25} ${x + w * .5} ${base} Z`,
+      fill: "#6b5134", stroke: "var(--ink)", "stroke-width": 4 }, g);
+    for (let i = 0; i < 4; i++) {   // flat-topped, layered canopy: the cypress look
+      const cy = top + 18 + i * 22, cw = w * (1.5 + i * .55) + rnd() * 20;
+      el("ellipse", { cx: x + (rnd() - .5) * 26, cy, rx: cw * .5, ry: 22 + rnd() * 6, class: "fill-t",
+        style: `fill: var(${i % 2 ? "--mid-dark" : "--mid"})`, stroke: "var(--ink)", "stroke-width": 4 }, g);
+    }
+    if (mossy) for (let i = 0; i < 5; i++) {   // Spanish moss
+      const mx = x + (rnd() - .5) * w * 2.2, my = top + 50 + rnd() * 50, len = 40 + rnd() * 60;
+      el("path", { d: `M${mx} ${my} q 8 ${len * .3} -2 ${len * .55} q -8 ${len * .25} 3 ${len * .45}`, fill: "none",
+        class: "fill-t", style: "stroke: var(--moss)", "stroke-width": 5, "stroke-linecap": "round" }, g);
+    }
+  }
+  const far = $("far"), mid = $("mid");
+  let d = "M0 560 L 0 470 ";
+  for (let x = 0; x < 1600; x += 70) {   // a row of rounded treetops
+    const h = 455 - rnd() * 55, w = 70;
+    d += `Q ${x + w * .1} ${h - 30} ${x + w * .5} ${h - 34} Q ${x + w * .9} ${h - 30} ${x + w} ${470 - rnd() * 20} `;
+  }
+  el("path", { d: d + "L 1600 560 Z", class: "fill-t", style: "fill: var(--far)", stroke: "var(--ink)", "stroke-width": 4 }, far);
+  [[620, 560, 300, 60], [760, 560, 250, 50], [900, 562, 330, 66], [1060, 560, 270, 52], [1500, 566, 340, 70]].forEach(
+    ([x, b, h, w]) => cypress(mid, x, b, h, w, null, true));
+
+  const shimmer = $("shimmer");
+  for (let i = 0; i < 26; i++) {
+    const x = rnd() * 1600, y = 590 + rnd() * 290, l = 20 + rnd() * 60;
+    el("path", { d: `M${x} ${y} h ${l}` }, shimmer);
+  }
+
+  const reeds = $("reeds");
+  [[40, 900, 240], [80, 900, 300], [118, 900, 210], [1470, 900, 260], [1520, 900, 320], [1566, 900, 230], [700, 900, 150]].forEach(([x, b, h], i) => {
+    const g = el("g", { class: "sway", style: `animation-delay:${-i * .7}s` }, reeds);
+    el("path", { d: `M${x} ${b} Q ${x + 6} ${b - h * .5} ${x + (i % 2 ? 10 : -6)} ${b - h}`, fill: "none", stroke: "#4f6b2f", "stroke-width": 7 }, g);
+    el("path", { d: `M${x} ${b} Q ${x + 6} ${b - h * .5} ${x + (i % 2 ? 10 : -6)} ${b - h}`, fill: "none", stroke: "var(--ink)", "stroke-width": 2, opacity: .6 }, g);
+    el("rect", { x: x + (i % 2 ? 2 : -14) , y: b - h + 18, width: 16, height: 54, rx: 8, fill: "#8a5a2b" }, g);
+    el("path", { d: `M${x - 30} ${b} Q ${x - 40} ${b - h * .4} ${x - 70} ${b - h * .55}`, fill: "none", stroke: "#5f8a3a", "stroke-width": 6 }, g);
   });
-}
 
-// Drag boards on the map; save on release.
-let dragging = null;
-function pick(ev) {
-  const rect = map.getBoundingClientRect();
-  const x = (ev.clientX - rect.left) * map.width / rect.width, y = (ev.clientY - rect.top) * map.height / rect.height;
-  const items = [["tx", null, layout.tx], ...Object.entries(layout.rx).map(([k, v]) => ["rx", k, v])];
-  for (const [kind, key, pos] of items) {
-    const [px, py] = toPx(pos);
-    if (Math.hypot(px - x, py - y) < 22) return { kind, key, x, y };
+  const flies = $("flies");
+  for (let i = 0; i < 22; i++) el("circle", { class: "firefly", cx: 80 + rnd() * 1440, cy: 200 + rnd() * 380, r: 3 + rnd() * 2.5,
+    style: `animation-delay:${(-rnd() * 3).toFixed(2)}s; animation-duration:${(2.2 + rnd() * 2).toFixed(2)}s` }, flies);
+  const stars = $("stars");
+  for (let i = 0; i < 60; i++) el("circle", { cx: rnd() * 1600, cy: rnd() * 380, r: .8 + rnd() * 1.6, fill: "#fff8de" }, stars);
+
+  // bobbers: the 3 receivers
+  const BOB_X = [620, 820, 1010], BOB_Y = 640;
+  const bobbers = BOB_X.map((x, i) => {
+    const g = el("g", {}, $("bobbers"));
+    const ripple1 = el("ellipse", { cx: x, cy: BOB_Y + 16, rx: 30, ry: 7, fill: "none", stroke: "var(--shimmer)", "stroke-width": 4 }, g);
+    const ripple2 = el("ellipse", { cx: x, cy: BOB_Y + 16, rx: 48, ry: 11, fill: "none", stroke: "var(--shimmer)", "stroke-width": 3 }, g);
+    const body = el("g", {}, g);
+    el("path", { d: `M${x} ${BOB_Y - 18} L ${x} ${BOB_Y - 46}`, stroke: "var(--ink)", "stroke-width": 4, "stroke-linecap": "round" }, body);
+    el("circle", { cx: x, cy: BOB_Y, r: 19, fill: "#fffaf0", stroke: "var(--ink)", "stroke-width": 4 }, body);
+    el("path", { d: `M${x - 19} ${BOB_Y} a 19 19 0 0 1 38 0 z`, fill: "#e5483d", stroke: "var(--ink)", "stroke-width": 4, "stroke-linejoin": "round" }, body);
+    el("text", { x, y: BOB_Y + 13, "text-anchor": "middle", "font-family": "Luckiest Guy, sans-serif", "font-size": 13, fill: "var(--ink)" }, body).textContent = i + 1;
+    return { body, ripple1, ripple2, x, shown: 0, target: 0 };
+  });
+
+  // ---------------------------------------------------------------- data
+  const S = { online: false, sense: null, phase: "LOBBY", ai: null, aiSeen: null, roundStart: null, scene: "" };
+
+  async function get(path) {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 2500);
+    try {
+      const r = await fetch(path, { cache: "no-store", signal: ctl.signal });
+      return r.ok ? await r.json() : null;
+    } catch { return null; } finally { clearTimeout(t); }
   }
-  return { x, y };
-}
-map.addEventListener("pointerdown", (ev) => { if (!layout) return; const p = pick(ev); if (p.kind) { dragging = p; map.setPointerCapture(ev.pointerId); } });
-map.addEventListener("pointermove", (ev) => {
-  if (!dragging) return;
-  const { x, y } = pick(ev), m = toM(Math.min(map.width, Math.max(0, x)), Math.min(map.height, Math.max(0, y)));
-  if (dragging.kind === "tx") layout.tx = m; else layout.rx[dragging.key] = m;
-  drawMap();
-});
-map.addEventListener("pointerup", () => { if (dragging) { dragging = null; post("/api/layout", layout); } });
 
-// ------------------------------------------------------------------ game
-const PHASE_TEXT = { LOBBY: "READY", GREEN: "GREEN LIGHT", RED: "RED LIGHT", OUT: "OUT!", WON: "YOU WIN" };
-function updateGame(g, events) {
-  $("light").className = "light " + g.phase;
-  $("light").textContent = PHASE_TEXT[g.phase] || g.phase;
-  $("sensed").textContent = g.sensed;
-  const r = g.round;
-  $("progress").style.width = (r ? r.progress : 0) + "%";
-  $("survival").textContent = r ? r.survival_s.toFixed(1) + "s" : "0.0s";
-  $("stillness").textContent = r ? Math.round(r.stillness * 100) + "%" : "—";
-  $("phase-left").textContent =
-    g.phase === "GREEN" || g.phase === "RED" ? `${g.phase === "RED" && g.in_grace ? "Freeze! " : ""}${g.phase_left.toFixed(1)}s left in this light`
-    : g.phase === "OUT" ? "Caught moving on red." : g.phase === "WON" ? "Made it to the finish!" : "Scan the room, then start a round.";
-  $("red").disabled = g.phase !== "GREEN";
-  const LABEL = { start: "▶ round started", green: "🟢 green light", red: "🔴 red light", red_called: "📣 red light called",
-                  eliminated: "❌ eliminated", won: "🏆 finished" };
-  $("events").innerHTML = events.slice().reverse()
-    .map((e) => `<li>${LABEL[e.kind] || e.kind}${e.detail ? " · " + e.detail.replace(/[<>&]/g, "") : ""}</li>`).join("");
-}
-
-// ------------------------------------------------------------------ loop
-async function tick() {
-  try {
-    const live = await api("/api/live?rows=10");
-    $("verdict").textContent = live.calibrated ? live.fused : "NOT SCANNED";
-    $("verdict").className = "verdict " + (live.calibrated ? live.fused : "");
-    $("status").textContent = live.calibrating ? "Scanning the room… keep the area empty and still"
-      : `${live.receivers.filter((r) => r.alive).length}/${live.receivers.length} receivers live`;
-    $("scan").disabled = live.calibrating;
-    ensureReceiverViews(live.receivers);
-    live.receivers.forEach((r, i) => updateReceiver(rxViews[i], r, i));
-    lastReceivers = live.receivers;
-    if (!layout) layout = await api("/api/layout");
-    drawMap();
-    updateGame(live.game, live.events);
-  } catch (e) {
-    $("status").textContent = "Server not reachable…";
+  async function pollSense() {
+    const s = await get("/api/sense");
+    S.online = !!s && s.state !== "OFFLINE";
+    S.sense = s;
+    render();
   }
-  setTimeout(tick, 100);
-}
+  async function pollPhase() {
+    const p = await get("/api/phase");
+    if (!p) return;
+    if (p.phase === "GREEN" && ["LOBBY", "OUT", "WON", null].includes(S.phase)) S.roundStart = Date.now();
+    if (p.phase === "LOBBY") S.roundStart = null;
+    S.phase = p.phase;
+    render();
+  }
+  async function pollAi() {
+    const a = await get("/api/ai/last");
+    if (a && a.line && a.line !== S.ai) { S.ai = a.line; S.aiSeen = Date.now(); showBubble(a.line); }
+  }
 
-$("scan").onclick = () => post("/api/calibrate?seconds=10");
-$("start").onclick = () => post("/api/game/start", { player: $("player").value || "Player" }).then((r) => { if (!r.ok) alert(r.reason); });
-$("red").onclick = () => post("/api/game/red?by=host");
-tick();
+  // ---------------------------------------------------------------- what to show
+  const SCENES = {
+    offline:  ["Gone fishin'", "the booth laptop is napping"],
+    scanning: ["Listening…", "everybody out! learning what an empty swamp sounds like"],
+    lobby:    ["Hop in!", "next player, hide behind the curtain"],
+    green:    ["Green light!", "paddle away, the gator's napping"],
+    red:      ["Red light!", "freeze… the gator is watching the water"],
+    out:      ["CHOMP!", "the Wi-Fi felt that wiggle"],
+    won:      ["You made it!", "not even the gator noticed"],
+  };
+  const FEELS = { MOVING: ["a wiggle!", "moving"], STILL: ["stillness", "still"], EMPTY: ["nobody home", ""],
+    UNCALIBRATED: ["needs a room scan", ""], SCANNING: ["listening…", ""], OFFLINE: ["a snoozing swamp", ""] };
+  const IDLE = ["“Shh. I'm resting my eyes.”", "“I can't see you. I don't need to.”", "“Wi-Fi bounces off you, you know.”",
+    "“Hold still. Stiller. Stiller than that.”"];
+
+  function sceneName() {
+    if (!S.online) return "offline";
+    const st = S.sense.state;
+    if (st === "SCANNING") return "scanning";
+    return { GREEN: "green", RED: "red", OUT: "out", WON: "won" }[S.phase] || "lobby";
+  }
+
+  function render() {
+    const scene = sceneName();
+    if (scene !== S.scene) {
+      root.dataset.scene = scene;
+      const [t, sub] = SCENES[scene];
+      $("signText").textContent = t;
+      $("signSub").textContent = sub;
+      const sign = $("sign");
+      sign.classList.remove("swing"); void sign.offsetWidth; sign.classList.add("swing");
+      if (scene === "lobby" || scene === "offline") $("quote").textContent = IDLE[Math.floor(Math.random() * IDLE.length)];
+      S.scene = scene;
+    }
+    const st = S.online ? S.sense.state : "OFFLINE";
+    const [word, cls] = FEELS[st] || [st.toLowerCase(), ""];
+    const feels = $("feels");
+    feels.textContent = word;
+    feels.className = "big " + cls;
+
+    // wiggle-o-meter: motion as a multiple of the "still" threshold; the tick is the freeze line (1x)
+    const m = S.online ? (S.sense.motion || 0) : 0, MAX = 4;
+    $("meterFill").style.width = `${Math.min(m / MAX, 1) * 100}%`;
+    $("meterTick").style.left = `${100 / MAX}%`;
+    $("meter").classList.toggle("hot", m > 1);
+
+    const ratios = S.online ? (S.sense.ratios || (S.sense.receivers || []).map((r) => r === "MOVING" ? 3 : .4)) : [];
+    bobbers.forEach((b, i) => { b.target = ratios[i] ?? 0; b.body.style.opacity = S.online && i >= ratios.length ? .35 : 1; });
+
+    const status = $("status");
+    status.classList.toggle("live", S.online);
+    $("statusText").textContent = S.online ? "live from the booth" : "booth is napping";
+  }
+
+  function clockText() {
+    if (!S.roundStart || !["green", "red", "out", "won"].includes(S.scene)) return "–";
+    const s = Math.floor((Date.now() - S.roundStart) / 1000);
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  }
+
+  let bubbleTimer = null;
+  function showBubble(line) {
+    $("quote").textContent = `“${line}”`;
+    const b = $("bubble");
+    const g = $("gator").getBoundingClientRect();
+    b.textContent = line;
+    b.style.left = `${Math.max(12, g.left + g.width * .45)}px`;
+    b.style.top = `${Math.max(12, g.top - 110)}px`;
+    b.classList.add("show");
+    clearTimeout(bubbleTimer);
+    bubbleTimer = setTimeout(() => b.classList.remove("show"), 6500);
+  }
+
+  // ---------------------------------------------------------------- animation loop
+  const pupils = [...document.querySelectorAll(".pupil")];
+  function frame(now) {
+    const t = now / 1000;
+    let loudest = 0, loudestX = 830;
+    bobbers.forEach((b, i) => {
+      b.shown += (b.target - b.shown) * .12;          // ease toward the Wi-Fi's value
+      const v = Math.min(b.shown, 5);
+      const bob = Math.sin(t * (1.6 + v * .5) + i * 1.7) * (1.5 + v * 2.2);
+      const dip = v * 4;                                 // more movement, deeper dip
+      b.body.setAttribute("transform", `translate(0 ${(bob + dip).toFixed(2)}) rotate(${(Math.sin(t * 1.3 + i) * (2 + v * 3)).toFixed(2)} ${b.x} ${BOB_Y})`);
+      const s = 1 + v * .22 + Math.sin(t * 2 + i) * .05;
+      b.ripple1.setAttribute("rx", (30 * s).toFixed(1));
+      b.ripple2.setAttribute("rx", (48 * s * (1 + v * .08)).toFixed(1));
+      b.ripple2.setAttribute("opacity", Math.min(.3 + v * .25, 1).toFixed(2));
+      if (b.shown > loudest) { loudest = b.shown; loudestX = b.x; }
+    });
+    // on red light the gator looks at whichever bobber is moving most
+    const watching = S.scene === "red" || S.scene === "out";
+    const look = watching ? Math.max(-4, Math.min(4, (loudestX - 360) / 120)) : Math.sin(t * .4) * 1.5;
+    pupils.forEach((p) => p.setAttribute("transform", `translate(${look.toFixed(2)} 0)`));
+    $("clock").textContent = clockText();
+    requestAnimationFrame(frame);
+  }
+
+  render();
+  requestAnimationFrame(frame);
+  pollSense(); pollPhase(); pollAi();
+  setInterval(pollSense, 250);
+  setInterval(pollPhase, 500);
+  setInterval(pollAi, 2000);
+})();
 </script>
 </body>
 </html>
