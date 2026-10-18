@@ -47,6 +47,7 @@ local function text(props, parent)
 	props.BackgroundTransparency = 1
 	props.Font = props.Font or Enum.Font.GothamBold
 	props.TextColor3 = props.TextColor3 or Color3.new(1, 1, 1)
+	props.TextStrokeTransparency = props.TextStrokeTransparency or 0.35 -- readable over the swamp without a panel
 	return new("TextLabel", props, parent)
 end
 
@@ -90,9 +91,7 @@ local timerText = text({ Size = UDim2.new(1, 0, 0, 36), Position = UDim2.fromOff
 
 ---------------------------------------------------------------- Wi-Fi card
 local card = new("Frame", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 24, 1, -24),
-	Size = UDim2.fromOffset(300, 150), BackgroundColor3 = PANEL, BackgroundTransparency = 0.08 }, gui)
-round(card, 18)
-new("UIStroke", { Thickness = 2, Color = CYAN, Transparency = 0.5 }, card)
+	Size = UDim2.fromOffset(300, 150), BackgroundTransparency = 1 }, gui)
 text({ Position = UDim2.fromOffset(18, 12), Size = UDim2.new(1, -36, 0, 18), Text = "WI-FI VISION · REAL PLAYER",
 	TextColor3 = CYAN, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left }, card)
 local stateText = text({ Position = UDim2.fromOffset(18, 34), Size = UDim2.new(1, -36, 0, 40),
@@ -164,8 +163,14 @@ local INTRO_ROWS = {
 }
 local BETWEEN = { LOBBY = true, SCAN = true, HIDE = true }
 
+local SHOW_CARD = false -- the info/results card was cut (cluttered the swamp); banner + message only
 local function updateCard()
 	local phase = Phase.Value
+	if not SHOW_CARD then
+		cardC.Visible = false
+		message.Visible = true
+		return
+	end
 	if phase == "RESULTS" and Results.Value ~= "" then
 		local ok, r = pcall(HttpService.JSONDecode, HttpService, Results.Value)
 		if not ok then
@@ -215,7 +220,7 @@ hostButton("rescan", "RESCAN ROOM", Color3.fromRGB(40, 120, 170), 4)
 
 -- which host buttons make sense right now (the server checks again)
 local function updateHost()
-	hostPanel.Visible = Players.LocalPlayer:GetAttribute("WiFindHost") == true
+	hostPanel.Visible = false -- host buttons removed (booth runs itself)
 	local phase = Phase.Value
 	local usable = {
 		start = phase == "LOBBY" or phase == "HIDE",
