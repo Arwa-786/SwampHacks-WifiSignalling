@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WiFind · Swamp Watch</title>
+<title>Gatorwave · Swamp Watch</title>
 <!--
   The judges' page, drawn as a 16-bit pixel-art scene (SNES style).
 
@@ -35,7 +35,7 @@
 <div class="sr" id="live" aria-live="polite"></div>
 
 <script src="/static/pixel.js"></script>
-<script>if (!window.Pixel) document.body.innerHTML = '<p style="color:#ffcd75;font:16px monospace;padding:24px">Can\'t load /static/pixel.js. The WiFind server running here is older than this page: restart it (Ctrl+C, then python app.py ...).</p>';</script>
+<script>if (!window.Pixel) document.body.innerHTML = '<p style="color:#ffcd75;font:16px monospace;padding:24px">Can\'t load /static/pixel.js. The Gatorwave server running here is older than this page: restart it (Ctrl+C, then python app.py ...).</p>';</script>
 <script>
 (() => {
   "use strict";
@@ -498,7 +498,7 @@
     drawNotes(now);
     drawDialog(now);
     drawRescueButton(now);
-    text(ctx, "WIFIND", 5, 5, "Y", { outline: "K", shadow: "R" });
+    text(ctx, "GATORWAVE", 5, 5, "Y", { outline: "K", shadow: "R" });
 
     const spoken = `${SCENES[scene].title}. ${S.say}`; // the same news for screen readers
     if (spoken !== lastSpoken) { document.getElementById("live").textContent = spoken; lastSpoken = spoken; }

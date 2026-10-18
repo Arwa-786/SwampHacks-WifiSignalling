@@ -1,4 +1,4 @@
-# WiFind: the swamp can feel you move
+# Gatorwave: the swamp can feel you move
 
 *Draft for Devpost. Every number below was measured on our own recordings; the
 conditions are stated next to it. Update the numbers after the booth sessions.*

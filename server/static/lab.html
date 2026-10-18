@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WiFind · Sensing Lab</title>
+<title>Gatorwave · Sensing Lab</title>
 <!--
   The Sensing Lab: one Wi-Fi sensing, four uses (fire rescue, smart lights, hot car, home care),
   drawn with the same pixel engine as the swamp game (pixel.js). /lab#lights etc. picks a use.
@@ -34,7 +34,7 @@
 <div class="sr" id="live" aria-live="polite"></div>
 
 <script src="/static/pixel.js"></script>
-<script>if (!window.Pixel) document.body.innerHTML = '<p style="color:#ffcd75;font:16px monospace;padding:24px">Can\'t load /static/pixel.js. The WiFind server running here is older than this page: restart it (Ctrl+C, then python app.py ...).</p>';</script>
+<script>if (!window.Pixel) document.body.innerHTML = '<p style="color:#ffcd75;font:16px monospace;padding:24px">Can\'t load /static/pixel.js. The Gatorwave server running here is older than this page: restart it (Ctrl+C, then python app.py ...).</p>';</script>
 <script>
 (() => {
   "use strict";
@@ -108,7 +108,7 @@
         : st.key === "still" ? "RESTING" + (br ? ", BREATHING-LIKE MOTION DETECTED" : "") +
           (still < 5000 ? ". MOVED JUST NOW." : `. LAST MOVED ${ago(still)} AGO.`)
         : "NOBODY HOME RIGHT NOW. NO CAMERAS IN THE HOUSE.";
-      return { plate: "WIFIND HOME CARE", place: "BEDROOM", box: "STATUS",
+      return { plate: "GATORWAVE HOME CARE", place: "BEDROOM", box: "STATUS",
         value: !S.online ? "?" : alert ? "CHECK!" : present ? "OK" : "AWAY",
         panel: alert ? "R" : present ? "g" : "G", ink: "W", flash: alert, light: present, crew: "GATOR, HOME CARE",
         say, lastMove: present ? ago(still) : "-" };
@@ -120,9 +120,9 @@
       const say = !S.online ? "NO SIGNAL. LIGHTS STAY AS THEY ARE."
         : st.key === "moving" ? "SOMEONE IS MOVING AROUND. LIGHTS ON."
         : st.key === "still" ? "SOMEONE IS SITTING STILL" + (breathing_ ? " AND BREATHING" : "") +
-          ". A MOTION SENSOR WOULD SWITCH THE LIGHTS OFF NOW. WIFIND KEEPS THEM ON."
+          ". A MOTION SENSOR WOULD SWITCH THE LIGHTS OFF NOW. GATORWAVE KEEPS THEM ON."
         : on ? `NOBODY SEEN. LIGHTS OFF IN ${left} S.` : "ROOM EMPTY. LIGHTS OFF, SAVING ENERGY.";
-      return { plate: "WIFIND SMART LIGHTS", place: "LIVING ROOM", box: "LIGHTS", value: on ? "ON" : "OFF",
+      return { plate: "GATORWAVE SMART LIGHTS", place: "LIVING ROOM", box: "LIGHTS", value: on ? "ON" : "OFF",
         panel: on ? "Y" : "D", ink: on ? "K" : "W", flash: false, light: on, crew: "GATOR, HOME HELPER", say };
     }
     if (mode === "car") {
@@ -131,10 +131,10 @@
         : st.key === "still" ? (breathing_ ? "CAR PARKED. NOTHING MOVING, BUT BREATHING-LIKE MOTION IN THE BACK SEAT. CHECK THE CAR NOW!"
           : "CAR PARKED. SOMEONE MAY BE INSIDE, NOT MOVING. CHECK THE CAR.")
         : "CAR EMPTY. NOTHING BREATHING INSIDE.";
-      return { plate: "WIFIND CAR CHECK", place: "BACK SEAT", box: "INSIDE", value: !S.online ? "?" : present ? "YES!" : "NO",
+      return { plate: "GATORWAVE CAR CHECK", place: "BACK SEAT", box: "INSIDE", value: !S.online ? "?" : present ? "YES!" : "NO",
         panel: present ? "R" : "G", ink: "W", flash: present, crew: "GATOR, CAR CHECK", say };
     }
-    return { plate: "WIFIND RESCUE SCANNER", place: "ROOM 1", box: "PRIORITY", value: st.priority, panel: st.panel, ink: "W",
+    return { plate: "GATORWAVE RESCUE SCANNER", place: "ROOM 1", box: "PRIORITY", value: st.priority, panel: st.panel, ink: "W",
       flash: st.priority === "1", crew: "GATOR, RESCUE CREW", say: st.say, helmet: true };
   }
 
@@ -341,7 +341,7 @@
     let shown = Math.floor((t - since) / (reduce ? 1 : 28));
     lines.forEach((ln, i) => { text(ctx, ln.slice(0, Math.max(0, shown)), dx + 31, dy + 14 + i * 9, "W"); shown -= ln.length; });
 
-    text(ctx, "WIFIND", 5, 5, "Y", { outline: "K", shadow: "R" });
+    text(ctx, "GATORWAVE", 5, 5, "Y", { outline: "K", shadow: "R" });
     const label = "SWAMP GAME", bw = textWidth(label) + 18;
     windowBox(ctx, 4, 16, bw, 15, hoverBack ? "T" : "D");
     const k = Math.floor(t / 400) % 2;
