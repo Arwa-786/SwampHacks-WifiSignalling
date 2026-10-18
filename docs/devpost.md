@@ -17,9 +17,14 @@ that a $15 set of ESP32 boards can do, and to make it something people *play*.
 - **A live swamp, in 16-bit pixel art.** The judges' screen shows what the Wi-Fi
   feels: each receiver is a fishing bobber that dips with movement, the transmitter
   is a lantern, and a gator watches the water on red light.
-- **Rescue Watch.** The same sensing, reframed for a fire: smoke blinds cameras but
-  not Wi-Fi. A burning-cabin view shows whether someone is in the room, whether
-  they're moving, whether they're breathing, and a rescue priority.
+- **Sensing Lab: one sensing, four uses.** The same live Wi-Fi reading, reframed:
+  - *Fire rescue:* smoke blinds cameras but not Wi-Fi; is someone in the room, moving,
+    breathing? Rescue priority 1/2.
+  - *Smart lights:* motion sensors switch off when you sit still reading; we keep them
+    on while someone is still there and switch off 20 s after nobody is sensed.
+  - *Hot car:* a sleeping baby or pet doesn't move, but breathes; parked car + breathing-like
+    motion = alert.
+  - *Home care:* "last moved 42 min ago" and a "check on them" alert, with no cameras in the home.
 - **An AI host.** After each round a gator (DeepSeek on Vultr, with tool calls for
   the round's facts) says one line about what happened, checked so it can't invent
   numbers.
@@ -31,6 +36,12 @@ that a $15 set of ESP32 boards can do, and to make it something people *play*.
 - **Sensing (Python):** per-board features every 0.1 s (motion size, smoothness,
   presence, RSSI, all relative to a scan of the empty room), a small neural network
   per task trained on labelled recordings, and a frequency analysis for breathing.
+- **Phone-checked labels:** people don't freeze perfectly when told to. A phone worn
+  by the hider (phyphox accelerometer) flags moments where a "freeze" had a fidget or a
+  "move" stood still; we train only on moments where the phone agrees.
+- **Quantization:** the motion network is 451 parameters; int8 quantization keeps
+  accuracy (80.3% -> 80.2% raw model accuracy) at 451 bytes, small enough for the ESP32 itself
+  (next step: run it on the board).
 - **Labels without a camera:** behind a curtain a camera can't see, so our recorders
   *speak a script* ("freeze", "move", "walk away") and label the data with what they
   asked for. For breathing we used a phone on the belly (phyphox) as ground truth,
@@ -49,6 +60,8 @@ that a $15 set of ESP32 boards can do, and to make it something people *play*.
 | Moving vs still vs empty (motion model) | **96.6%** accuracy; 100% of movement caught; **0 false eliminations** | 2 sessions, 1 person, standing 1.5 m, no curtain; each session tested by a model trained on the other |
 | Same, old hand-tuned rules | 48% | same windows |
 | Pretrained Wi-Fi model (CSI-BERT2) + our head | 54.9% | same test |
+| **Booth model, phone-checked labels** | **87.5%** accuracy; freezes called still **80%** (was 47% with unchecked labels); moves caught 90%; empty 94.5% | 3 booth sessions (2 behind a curtain, 1 in front), each held out |
+| int8 vs float32 model | 80.2% vs 80.3% raw model accuracy, 4x smaller (451 bytes) | same booth sessions |
 | Moves caught behind a curtain | **100%** of move turns, within ~3 s | live voice-guided test, transmitter behind the hider |
 | Breathing person vs empty room | **100% found, 0% empty-room false alarms** | 2 sessions behind the curtain (paced + natural), each tested on the other |
 | Same, old frequency rule | 19-20% found | same windows |
@@ -69,8 +82,9 @@ fall detection for at-home safety without cameras; two hiders judged separately
 
 ## Honest limits
 One person and a handful of sessions so far; ESP32s are not lab radios; Wi-Fi heart
-rate is out of reach for us; Rescue Watch is a prototype, and a quiet signal does
-not prove an empty room.
+rate is out of reach for us; the Sensing Lab uses are prototypes shown with the booth (not tested in a real car or
+home), we say "breathing-like motion" because breath-hold tests are still to come, and a
+quiet signal does not prove an empty room.
 
 ## Built with
 ESP32, ESP-NOW, Python, NumPy/SciPy, FastAPI, Roblox Studio (Luau), Vultr (cloud
