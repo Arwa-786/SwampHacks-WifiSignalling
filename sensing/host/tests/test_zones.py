@@ -68,4 +68,4 @@ def test_conditions_are_shuffled_within_rounds_with_no_gaps():
     assert sorted(c.split("@")[0] for c in conds if c.endswith("@1")) == ["a_moves", "b_moves", "both_freeze", "both_move"]
     assert all(a[1] == b[0] for a, b in zip(plan, plan[1:]))
     solo = [lab for _, _, lab, _ in schedule("solo", 1)]
-    assert solo.count("walk") == 4 and "both_move@1" not in solo
+    assert solo.count("go_to_zone") == 4 and "both_move@1" not in solo

@@ -248,6 +248,11 @@ Also: Guardian "room memory" day strip (state_agg), and forks to re-score old ga
 - **Decision: ML for everything** (move/freeze, presence, breathing, falls, zones): record
   labelled data in the real booth layout with a spoken-script recorder, train, report held-out
   numbers; rules only as a baseline.
+- The ML loop (sensing/host, server stopped):
+  `python record_booth.py data/booth_01.log --person arwa --position "standing, TX 1m behind"` (x2-3,
+  vary pose/person) -> `python train_model.py --fuse data/booth_*_rx*.log --out models/wifind_booth.json`
+  -> `python evaluate.py data/booth_*_rx*.log --out data/booth_report.md` -> run the server with
+  `--model ../sensing/host/models/wifind_booth.json`.
 
 ## Experiments still to run (need the boards)
 - Paced breathing (`record_breathing.py`, then `eval_breathing.py`): true vs Wi-Fi rate + empty-room

@@ -19,7 +19,7 @@ pair mode (two people, the real game):
      8 s  "Both freeze"                           label "both_freeze@<round>"
     each followed by 4 s of "freeze"              label "rest"    (not scored)
 solo mode (one person): conditions a_moves, b_moves, a_freeze, b_freeze; a
-"walk to zone X" break before each one (label "walk"). It answers the same
+"walk to zone X" break before each one (label "go_to_zone"). It answers the same
 question without the second, still person in the room, so treat a solo pass
 as promising, not proof.
 
@@ -77,7 +77,7 @@ def schedule(mode: str, rounds: int, seed: int = 0) -> list[tuple[float, float, 
         rng.shuffle(conds)
         for c in conds:
             if mode == "solo":
-                add(WALK_S, "walk", f"Walk to zone {c[0].upper()}.")
+                add(WALK_S, "go_to_zone", f"Walk to zone {c[0].upper()}.")
                 add(COND_S, f"{c}@{r}", SOLO_MOVE[c])
             else:
                 add(COND_S, f"{c}@{r}", PROMPTS[c])
@@ -85,29 +85,20 @@ def schedule(mode: str, rounds: int, seed: int = 0) -> list[tuple[float, float, 
     return plan
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("output")
-    parser.add_argument("--mode", choices=["pair", "solo"], default="pair")
-    parser.add_argument("--rounds", type=int, default=6)
-    parser.add_argument("--zones", default="unknown", help='where the zones are, e.g. "A=left of RX1, B=right of RX3"')
-    parser.add_argument("--motion", default="normal", help='what "move" meant, e.g. "small shift", "arm wave"')
-    parser.add_argument("--swapped", action="store_true", help="the players swapped zones vs the first session")
-    parser.add_argument("--ports", nargs="*")
-    parser.add_argument("--seed", type=int, default=None, help="condition order (default: random)")
-    args = parser.parse_args()
-
+def record_script(plan: list[tuple[float, float, str, str]], output: str, header: str,
+                  ports: list[str] | None = None) -> None:
+    """Speak each segment's prompt on time and record every RX board meanwhile, each
+    line labelled with the segment it fell in. One log per board: <output>_rx<mac>.log
+    (the format record_labeled.py writes, so features.py / train_model.py read it)."""
     from multi_rx import find_rx_ports
 
-    ports = args.ports or find_rx_ports()
+    ports = ports or find_rx_ports()
     if not ports:
         raise SystemExit("No RX boards streaming CSI. Is the WiFind server still running? Stop it first.")
-    seed = args.seed if args.seed is not None else random.randrange(10**6)
-    plan = schedule(args.mode, args.rounds, seed)
     total = plan[-1][1]
-    print(f"Recording {len(ports)} receiver(s) for {total / 60:.1f} min ({args.mode}, {args.rounds} rounds): {ports}")
+    print(f"Recording {len(ports)} receiver(s) for {total / 60:.1f} min: {ports}")
 
-    label = {"now": "settle"}
+    label = {"now": plan[0][2]}
     rows: dict[str, list[str]] = {p: [] for p in ports}
     macs: dict[str, str] = {}
     stop = threading.Event()
@@ -136,24 +127,42 @@ def main() -> None:
                 time.sleep(0.02)
             label["now"] = seg
             print(f"{seg_start:5.0f}s  {seg:16s} {prompt}", flush=True)
-            say(prompt)
+            if prompt:
+                say(prompt)
         while time.monotonic() - start < total:
             time.sleep(0.05)
     finally:
         stop.set()
     say("Done. Thank you.")
 
-    base, ext = os.path.splitext(args.output)
-    os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
+    base, ext = os.path.splitext(output)
+    os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
     for port in ports:
         mac = macs.get(port, "")
-        out = args.output if len(ports) == 1 else f"{base}_rx{mac.replace(':', '')[-4:] or os.path.basename(port)}{ext}"
+        out = output if len(ports) == 1 else f"{base}_rx{mac.replace(':', '')[-4:] or os.path.basename(port)}{ext}"
         with open(out, "w") as f:
-            f.write(f"# record_zones {time.strftime('%Y-%m-%d %H:%M:%S')} mode={args.mode} rounds={args.rounds} "
-                    f"seed={seed} swapped={int(args.swapped)} port={port} mac={mac} zones={args.zones.replace(' ', '_')} "
-                    f"motion={args.motion.replace(' ', '_')}\n")
+            f.write(f"# {header} {time.strftime('%Y-%m-%d %H:%M:%S')} port={port} mac={mac}\n")
             f.write("\n".join(rows[port]) + "\n")
         print(f"saved {len(rows[port])} lines to {out}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("output")
+    parser.add_argument("--mode", choices=["pair", "solo"], default="pair")
+    parser.add_argument("--rounds", type=int, default=6)
+    parser.add_argument("--zones", default="unknown", help='where the zones are, e.g. "A=left of RX1, B=right of RX3"')
+    parser.add_argument("--motion", default="normal", help='what "move" meant, e.g. "small shift", "arm wave"')
+    parser.add_argument("--swapped", action="store_true", help="the players swapped zones vs the first session")
+    parser.add_argument("--ports", nargs="*")
+    parser.add_argument("--seed", type=int, default=None, help="condition order (default: random)")
+    args = parser.parse_args()
+
+    seed = args.seed if args.seed is not None else random.randrange(10**6)
+    plan = schedule(args.mode, args.rounds, seed)
+    record_script(plan, args.output,
+                  f"record_zones mode={args.mode} rounds={args.rounds} seed={seed} swapped={int(args.swapped)} "
+                  f"zones={args.zones.replace(' ', '_')} motion={args.motion.replace(' ', '_')}", args.ports)
 
 
 if __name__ == "__main__":
