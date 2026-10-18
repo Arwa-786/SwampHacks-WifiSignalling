@@ -121,6 +121,7 @@ def main() -> None:
 
     base, ext = os.path.splitext(args.output)
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
+    saved = []
     for port in ports:
         mac = macs.get(port, "")
         out = args.output if len(ports) == 1 else f"{base}_rx{mac.replace(':', '')[-4:] or os.path.basename(port)}{ext}"
@@ -129,6 +130,11 @@ def main() -> None:
                     f"mac={mac} person={args.person.replace(' ', '_')} position={args.position.replace(' ', '_')}\n")
             f.write("\n".join(rows[port]) + "\n")
         print(f"saved {len(rows[port])} lines to {out}")
+        saved.append(out)
+    if len(saved) > 1:  # the files are safe on disk; now the database copy
+        from tiger_upload import upload
+
+        upload(saved)
 
 
 if __name__ == "__main__":

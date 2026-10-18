@@ -5,8 +5,11 @@ time chunks, so "the 8 seconds around this elimination" stays fast as data grows
   readings      one row per receiver per tick (~10 Hz): state, motion vs its
                 threshold, the fused verdict and the model's P(moving)
   events        light changes, eliminations, wins, room scans (sparse)
-  breathing     breathing-rate estimates over time
-  training_windows  the labelled ML training set (8 features per board per window)
+  breathing     breathing-rate estimates over time (live, and per recorded window
+                with the true paced rate)
+  recordings    every labelled recording session (who, where, which boards, how long)
+  training_windows  the labelled ML training set: motion (8 features per board per 0.1 s)
+                and breathing (4 per board per 1 s) windows
   model_runs    every evaluation of every model (an in-database model history)
 On top of them:
   readings_1s   continuous aggregate: per-second motion per board, kept up to
@@ -76,6 +79,23 @@ SCHEMA = [
         features  REAL[]      NOT NULL
     )""",
     "SELECT create_hypertable('training_windows', by_range('time'), if_not_exists => TRUE)",
+    # labelled recordings (record_booth / record_breathing / record_zones / record_labeled)
+    """CREATE TABLE IF NOT EXISTS recordings (
+        session   TEXT        PRIMARY KEY,
+        kind      TEXT        NOT NULL,
+        person    TEXT,
+        position  TEXT,
+        boards    TEXT[],
+        started   TIMESTAMPTZ,
+        seconds   REAL,
+        header    TEXT
+    )""",
+    # training_windows holds both motion (8 features/board) and breathing (4) windows:
+    # label = what the recorder asked for, target = the class the model learns
+    "ALTER TABLE training_windows ADD COLUMN IF NOT EXISTS kind TEXT",
+    "ALTER TABLE training_windows ADD COLUMN IF NOT EXISTS target TEXT",
+    "ALTER TABLE breathing ADD COLUMN IF NOT EXISTS session TEXT",
+    "ALTER TABLE breathing ADD COLUMN IF NOT EXISTS truth REAL",
     """CREATE TABLE IF NOT EXISTS model_runs (
         time      TIMESTAMPTZ NOT NULL DEFAULT now(),
         model     TEXT        NOT NULL,

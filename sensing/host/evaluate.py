@@ -157,6 +157,7 @@ def main() -> None:
                 r = {k: np.concatenate([p[k] for p in groups[value]]) for k in per[0]}
                 rows.append((f"{dim}: {value}", scores(r["y"], r["model"])))
     report += ["## Leave-one-session-out (hybrid: model for MOVING + presence rule)", "", table(rows), ""]
+    runs = [("motion_hybrid", name, sc) for name, sc in rows]  # every reported number also goes to Tiger
 
     # leave-one-person-out
     people = sorted({s["person"] for s in sessions})
@@ -167,12 +168,15 @@ def main() -> None:
             r = held_out(idx)
             rows.append((f"{person} (never in training)", scores(r["y"], r["model"])))
         report += ["## Leave-one-person-out (the model never saw this person)", "", table(rows), ""]
+        runs += [("motion_hybrid", name, sc) for name, sc in rows]
     else:
         report += ["## Leave-one-person-out", "", "_Only one person recorded so far: record a second person._", ""]
 
     # baseline
+    rule_scores = scores(all_res["y"], all_res["rules"])
     report += ["## Same held-out data, old hand-tuned rules (MOVING only)", "",
-               table([("rules (only the MOVING columns mean anything)", scores(all_res["y"], all_res["rules"]))]), ""]
+               table([("rules (only the MOVING columns mean anything)", rule_scores)]), ""]
+    runs.append(("motion_rules", "all sessions (each held out)", rule_scores))
 
     text = "\n".join(report)
     print("\n" + text)
@@ -180,6 +184,9 @@ def main() -> None:
     with open(args.out, "w") as f:
         f.write(text + "\n")
     print(f"\nsaved {args.out}")
+    from tiger_upload import save_model_runs
+
+    save_model_runs(runs)
 
 
 if __name__ == "__main__":

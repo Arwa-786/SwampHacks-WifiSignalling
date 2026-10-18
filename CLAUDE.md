@@ -256,6 +256,12 @@ Also: Guardian "room memory" day strip (state_agg), and forks to re-score old ga
 - Breathing ML: `python train_breathing.py data/breath_*_rx*.log data/booth_*_rx*.log --out models/breathing.json`
   (model = breathing person vs empty room; rate = FFT, shown only when the model says breathing).
   Webcam sessions can't train it (labels flip too often for 15 s windows). Not yet wired into the server.
+  First real session (sitting behind curtain): model 100% found / 0% empty-false (same-session split),
+  old rule 9% / 7%; but "presence" alone gives the same, so it proves "still person", not breathing yet
+  (next: breath-hold segments). FFT rate stuck near 9/min.
+- Everything goes to Tiger: recorders upload when they finish (tiger_upload.py: recordings,
+  training_windows kind motion/breathing, breathing rates with true pace, readings); train_breathing.py
+  and evaluate.py save every reported number to model_runs; backfill_tiger.py for older/failed uploads.
 
 ## Experiments still to run (need the boards)
 - Paced breathing (`record_breathing.py`, then `eval_breathing.py`): true vs Wi-Fi rate + empty-room

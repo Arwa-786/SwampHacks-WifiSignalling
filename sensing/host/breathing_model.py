@@ -96,7 +96,7 @@ def session_dataset(paths: list[str]) -> dict:
     """One session recorded on several boards (board order = paths order) ->
     windows on a shared time grid with every board's scaled features side by side.
     Returns t, x (n, boards*4), y (class, or -1 = not used), truth (paced rate or nan),
-    rate (FFT rate of the board with the clearest rhythm)."""
+    rate + conf (FFT rate and confidence of the board with the clearest rhythm), label."""
     boards = [load_session(p) for p in paths]
     start = max(b.times[0] for b in boards) + WINDOW_S
     end = min(b.times[-1] for b in boards)
@@ -135,7 +135,9 @@ def session_dataset(paths: list[str]) -> dict:
     conf, rates = np.array(conf), np.array(rates)
     best = np.nanargmax(np.where(np.isnan(conf), -1, conf), axis=0)
     truth = np.array([float(l.split("_")[1]) if l and l.startswith("breath_") else np.nan for l in lab])
-    return {"t": grid, "x": np.hstack(xs), "y": y, "truth": truth, "rate": rates[best, np.arange(len(grid))]}
+    return {"t": grid, "x": np.hstack(xs), "y": y, "truth": truth, "rate": rates[best, np.arange(len(grid))],
+            "conf": np.nanmax(np.where(np.isnan(conf), -1, conf), axis=0),
+            "label": np.array([l or "" for l in lab], dtype=object)}
 
 
 # ---------------------------------------------------------------- the model

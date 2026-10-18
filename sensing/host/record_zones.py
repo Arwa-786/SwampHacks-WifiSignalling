@@ -137,6 +137,7 @@ def record_script(plan: list[tuple[float, float, str, str]], output: str, header
 
     base, ext = os.path.splitext(output)
     os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
+    saved = []
     for port in ports:
         mac = macs.get(port, "")
         out = output if len(ports) == 1 else f"{base}_rx{mac.replace(':', '')[-4:] or os.path.basename(port)}{ext}"
@@ -144,6 +145,11 @@ def record_script(plan: list[tuple[float, float, str, str]], output: str, header
             f.write(f"# {header} {time.strftime('%Y-%m-%d %H:%M:%S')} port={port} mac={mac}\n")
             f.write("\n".join(rows[port]) + "\n")
         print(f"saved {len(rows[port])} lines to {out}")
+        saved.append(out)
+    if len(saved) > 1:  # the files are safe on disk; now the database copy
+        from tiger_upload import upload
+
+        upload(saved)
 
 
 def main() -> None:

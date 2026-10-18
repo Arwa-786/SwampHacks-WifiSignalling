@@ -72,7 +72,7 @@ def main() -> None:
         if not np.any(d["y"][keep] == bm.BREATHING):
             print(f"skipping {name}: no 'still and breathing' windows")
             continue
-        sessions.append({"name": os.path.basename(name), **{k: v[keep] for k, v in d.items()}})
+        sessions.append({"name": os.path.basename(name), **{k: v[keep] for k, v in d.items() if k != "label"}})
         counts = np.bincount(sessions[-1]["y"], minlength=2)
         print(f"{name}: {keep.sum()} windows (empty {counts[0]}, breathing {counts[1]})")
 
@@ -113,6 +113,10 @@ def main() -> None:
     with open(args.report, "w") as f:
         f.write(text)
     print(f"saved {args.report}")
+    from tiger_upload import save_model_runs
+
+    save_model_runs([("breathing_mlp", name, sc) for name, sc in rows_model]
+                    + [(f"breathing_rule_conf{MIN_CONFIDENCE}", name, sc) for name, sc in rows_rule])
 
     if args.out:
         groups = [g for g in group_boards(args.recordings) if os.path.basename(g[0]) in {s["name"] for s in sessions}]
