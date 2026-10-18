@@ -1,422 +1,348 @@
 <!doctype html>
-<html lang="en" data-scene="offline">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WiFind · the swamp is listening</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Gochi+Hand&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+<title>WiFind · Swamp Watch</title>
 <!--
-  The judges' page. Everything the Wi-Fi knows is drawn INTO a cartoon swamp camp:
-    3 fishing bobbers = the 3 Wi-Fi receivers (they dip when the Wi-Fi feels movement)
+  The judges' page, drawn as a 16-bit pixel-art scene (SNES style).
+
+  Everything, text included, is drawn on ONE small canvas (~320x180 "game
+  pixels") and scaled up by a whole number, so every pixel on screen is the
+  same size. One 20-colour palette, hard edges; where colours meet, an ordered
+  dither instead of a gradient. No images or web fonts: every sprite and the
+  5x7 font are defined below as text grids.
+
+  What the Wi-Fi knows is part of the scene:
+    3 fishing bobbers = the 3 Wi-Fi receivers (they dip as each one feels movement)
     dock lantern      = the transmitter (it sends out rings)
-    the gator         = the game: naps on green, watches on red, chomps when you're caught
-  Data: /api/sense (4x/s), /api/phase (2x/s), /api/ai/last (every 2 s). Works the
-  same on the laptop and through the Vultr hub. No data = night, "Gone fishin'".
+    the gator         = the game: asleep on green, watching on red, CHOMP on a catch
+  Data: /api/sense (4x/s), /api/phase (2x/s), /api/ai/last (every 2 s). Works on
+  the laptop and through the Vultr hub. No data = night scene, "Gone fishin'".
 -->
 <style>
-  :root {
-    --ink: #23301f;           /* outline colour for every drawn thing */
-    --cream: #fff4d6;
-    --paper: #fbf1d4;
-    --wood: #a8703f; --wood-dark: #7a4b25; --wood-light: #c98d55;
-    --go: #4fbf5a; --stop: #e5483d; --gold: #f5b83d;
-    --sky-top: #f3b98a; --sky-bot: #fbe4b2; --sun: #ffd36e; --sun-glow: rgba(255, 211, 110, .45);
-    --far: #8ea779; --mid: #56763f; --mid-dark: #3f5a2e; --moss: #9fae78;
-    --water-top: #5f9e8b; --water-bot: #2e6a5d; --shimmer: rgba(255, 255, 255, .35);
-    --bank: #6f8f45; --bank-dark: #55703a;
-    --night: 0; --mist: 0; --tint: rgba(0, 0, 0, 0);
-  }
-  /* one mood per moment; colours ease between them */
-  [data-scene="green"] { --sky-top: #8fd3e6; --sky-bot: #e4f4d9; --sun: #ffe27a; --water-top: #4ea6a0; --water-bot: #26706a; --far: #8db57a; }
-  [data-scene="red"], [data-scene="out"] { --sky-top: #ee7f62; --sky-bot: #f8c48c; --sun: #ff9e5e; --sun-glow: rgba(255, 120, 80, .45);
-    --water-top: #6a8378; --water-bot: #34504a; --far: #8f8a68; --mid: #56653a; --tint: rgba(200, 40, 20, .08); }
-  [data-scene="won"] { --sky-top: #7468c0; --sky-bot: #f3b29e; --sun: #ffd9a0; --water-top: #5b7fa0; --water-bot: #2c4a66;
-    --far: #6f7f8a; --mid: #3f5a4a; --night: .6; }
-  [data-scene="scanning"] { --sky-top: #cfe2dd; --sky-bot: #f1f2e4; --sun: #fff6cf; --water-top: #8fb5aa; --water-bot: #4e7f73; --mist: .75; }
-  [data-scene="offline"] { --sky-top: #16223a; --sky-bot: #3a4a68; --sun: #f2efd2; --sun-glow: rgba(242, 239, 210, .25);
-    --far: #2c3d42; --mid: #22342c; --mid-dark: #182820; --moss: #4c5a48; --water-top: #1d3a42; --water-bot: #0d2228;
-    --bank: #2e4128; --bank-dark: #223220; --shimmer: rgba(220, 230, 255, .18); --night: 1; }
-
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; }
-  body { background: #2a3b2a; color: var(--ink); font-family: "Nunito", system-ui, sans-serif; overflow: hidden; }
-  #swamp { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
-  #swamp stop { transition: stop-color 1.2s ease; }
-  .fill-t { transition: fill 1.2s ease, opacity 1.2s ease; }
-
-  /* ------------------------------------------------------------ the scene */
-  .sway { transform-box: fill-box; transform-origin: 50% 100%; animation: sway 5s ease-in-out infinite alternate; }
-  @keyframes sway { from { transform: rotate(-2.2deg); } to { transform: rotate(2.2deg); } }
-  .drift { animation: drift 7s ease-in-out infinite alternate; }
-  @keyframes drift { from { transform: translateX(-14px); } to { transform: translateX(14px); } }
-  .flame { transform-box: fill-box; transform-origin: 50% 100%; animation: flicker .9s ease-in-out infinite alternate; }
-  .flame.b { animation-duration: .7s; animation-delay: -.3s; }
-  @keyframes flicker { from { transform: scale(1, .82) skewX(-4deg); } to { transform: scale(.92, 1.08) skewX(4deg); } }
-  .ring { transform-box: fill-box; transform-origin: center; animation: ring 3s ease-out infinite; opacity: 0; }
-  .ring.r2 { animation-delay: 1s; } .ring.r3 { animation-delay: 2s; }
-  @keyframes ring { 0% { transform: scale(.2); opacity: .9; } 100% { transform: scale(2.6); opacity: 0; } }
-  .firefly { animation: blink 3s ease-in-out infinite; opacity: 0; }
-  @keyframes blink { 0%, 100% { opacity: 0; } 45%, 55% { opacity: calc(.25 + var(--night) * .75); } }
-  #mist { opacity: var(--mist); transition: opacity 1.5s ease; }
-  #stars { opacity: var(--night); transition: opacity 1.5s ease; }
-  #tint { fill: var(--tint); transition: fill 1s ease; }
-
-  /* the gator: asleep (lids down) unless it's red light */
-  .lid { transform-box: fill-box; transform-origin: 50% 0; transform: scaleY(1); transition: transform .35s ease; }
-  [data-scene="lobby"] .lid, [data-scene="scanning"] .lid { transform: scaleY(.55); }
-  [data-scene="red"] .lid, [data-scene="out"] .lid { transform: scaleY(0); }
-  [data-scene="won"] .lid { transform: scaleY(.75); }
-  .shut { opacity: 0; transition: opacity .3s; }
-  [data-scene="green"] .shut, [data-scene="offline"] .shut { opacity: 1; }
-  .zzz { opacity: 0; transition: opacity .6s; }
-  [data-scene="green"] .zzz, [data-scene="offline"] .zzz { opacity: 1; }
-  .zzz text { animation: zzz 3s ease-in-out infinite; }
-  .zzz text:nth-child(2) { animation-delay: 1s; } .zzz text:nth-child(3) { animation-delay: 2s; }
-  @keyframes zzz { 0% { opacity: 0; transform: translate(0, 0); } 30% { opacity: 1; } 100% { opacity: 0; transform: translate(18px, -40px); } }
-  #gator { transition: transform .5s cubic-bezier(.3, 1.6, .5, 1); }
-  [data-scene="out"] #gator { transform: translateY(-34px); }
-  #jaw { transform-box: fill-box; transform-origin: 0% 50%; transform: rotate(0deg); transition: transform .25s ease; }
-  [data-scene="out"] #jaw { transform: rotate(14deg); }  /* hinge at the back: the snout end drops open */
-  #teeth { opacity: 0; transition: opacity .2s; }
-  [data-scene="out"] #teeth { opacity: 1; }
-  .splash { opacity: 0; }
-  [data-scene="out"] .splash { animation: splash 1.1s ease-out 1; }
-  @keyframes splash { 0% { opacity: 1; transform: translate(0, 0); } 100% { opacity: 0; transform: translate(var(--dx), -70px); } }
-
-  /* --------------------------------------------------------------- the UI */
-  .logo { position: fixed; left: 26px; top: 20px; z-index: 3; }
-  .logo h1 { margin: 0; font: 400 46px/1 "Luckiest Guy", "Nunito", sans-serif; color: var(--cream); letter-spacing: 1px;
-    -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill; text-shadow: 0 4px 0 var(--ink); transform: rotate(-3deg); }
-  .logo p { margin: 6px 0 0 6px; font: 22px/1.1 "Gochi Hand", cursive; color: var(--cream); text-shadow: 0 2px 0 rgba(0,0,0,.45); }
-
-  /* the hanging wooden sign */
-  .sign-wrap { position: fixed; left: 50%; top: 0; transform: translateX(-50%); z-index: 2; pointer-events: none; }
-  .sign { position: relative; margin-top: 58px; padding: 14px 40px 18px; min-width: 380px; text-align: center;
-    background:
-      repeating-linear-gradient(176deg, transparent 0 13px, rgba(0,0,0,.07) 13px 15px, transparent 15px 31px),
-      linear-gradient(var(--wood-light), var(--wood) 55%, var(--wood-dark));
-    border: 4px solid var(--ink); border-radius: 10px 14px 9px 16px / 14px 9px 16px 10px;
-    box-shadow: 0 7px 0 var(--ink), 0 18px 30px rgba(0,0,0,.25);
-    transform-origin: 50% -58px; animation: hang 4s ease-in-out infinite alternate; }
-  .sign.swing { animation: swing 1.2s cubic-bezier(.3, 1.4, .5, 1) 1, hang 4s ease-in-out 1.2s infinite alternate; }
-  @keyframes hang { from { transform: rotate(-1.2deg); } to { transform: rotate(1.2deg); } }
-  @keyframes swing { 0% { transform: rotate(9deg); } 40% { transform: rotate(-6deg); } 70% { transform: rotate(3deg); } 100% { transform: rotate(-1.2deg); } }
-  .sign::before, .sign::after { content: ""; position: absolute; top: -62px; width: 5px; height: 62px;
-    background: repeating-linear-gradient(160deg, #d9c08a 0 5px, #b89a5e 5px 10px); border: 1.5px solid var(--ink); }
-  .sign::before { left: 46px; } .sign::after { right: 46px; }
-  .nail { position: absolute; top: 8px; width: 11px; height: 11px; border-radius: 50%; background: #5d5a55; border: 2px solid var(--ink); }
-  .nail.l { left: 40px; } .nail.r { right: 40px; }
-  .sign h2 { margin: 0; font: 400 clamp(40px, 6.4vw, 78px)/1 "Luckiest Guy", "Nunito", sans-serif; letter-spacing: 1px;
-    color: var(--cream); -webkit-text-stroke: 3px var(--ink); paint-order: stroke fill; text-shadow: 0 5px 0 var(--ink); }
-  [data-scene="green"] .sign h2 { color: #9be86f; }
-  [data-scene="red"] .sign h2, [data-scene="out"] .sign h2 { color: #ff7a5c; }
-  [data-scene="won"] .sign h2 { color: #ffd76a; }
-  .sign .sub { margin-top: 6px; font: 26px/1.1 "Gochi Hand", cursive; color: #fff1cf; text-shadow: 0 2px 0 rgba(35,48,31,.8); }
-
-  /* taped-on field notes */
-  .notes { position: fixed; right: 26px; top: 120px; width: 272px; z-index: 2; padding: 30px 24px 22px;
-    background: repeating-linear-gradient(transparent 0 33px, rgba(80, 120, 160, .22) 33px 35px), var(--paper);
-    border: 3px solid var(--ink); border-radius: 4px 10px 6px 12px; transform: rotate(2.2deg);
-    box-shadow: 6px 8px 0 rgba(35,48,31,.55); font-family: "Gochi Hand", cursive; }
-  .notes::before { content: ""; position: absolute; top: -16px; left: 50%; width: 110px; height: 30px; transform: translateX(-50%) rotate(-4deg);
-    background: rgba(244, 221, 140, .85); border: 1.5px dashed rgba(35,48,31,.35); }
-  .notes h3 { margin: 0 0 4px; font: 400 26px/1 "Luckiest Guy", sans-serif; color: var(--wood-dark); letter-spacing: .5px; }
-  .notes .label { font-size: 20px; color: #5b5240; margin-top: 10px; }
-  .notes .big { font-size: 34px; line-height: 1.05; color: var(--ink); }
-  .notes .big.moving { color: var(--stop); } .notes .big.still { color: #3d8a43; }
-  .meter { position: relative; height: 26px; margin-top: 6px; border: 3px solid var(--ink); border-radius: 14px 10px 13px 9px; background: #fff8e6; overflow: hidden; }
-  .meter i { position: absolute; inset: 0 auto 0 0; width: 0; background: repeating-linear-gradient(-45deg, var(--go) 0 10px, #43a94d 10px 20px); transition: width .25s ease; }
-  .meter.hot i { background: repeating-linear-gradient(-45deg, var(--stop) 0 10px, #c93b31 10px 20px); }
-  .meter b { position: absolute; top: -4px; bottom: -4px; width: 3px; background: var(--ink); }
-  .meter-note { font-size: 16px; color: #6d644f; display: flex; justify-content: space-between; }
-  .quote { margin-top: 6px; font-size: 22px; line-height: 1.15; color: #3e3626; min-height: 52px; }
-
-  /* the gator's speech bubble (placed next to the gator by JS) */
-  .bubble { position: fixed; z-index: 3; max-width: 330px; padding: 12px 16px; background: #fffdf3; border: 3px solid var(--ink);
-    border-radius: 22px 18px 24px 16px; box-shadow: 4px 5px 0 var(--ink); font: 23px/1.15 "Gochi Hand", cursive;
-    opacity: 0; transform: scale(.6) translateY(10px); transform-origin: 20% 100%; transition: opacity .25s, transform .3s cubic-bezier(.3,1.6,.5,1); pointer-events: none; }
-  .bubble.show { opacity: 1; transform: none; }
-  .bubble::after { content: ""; position: absolute; left: 34px; bottom: -18px; width: 22px; height: 22px; background: #fffdf3;
-    border-right: 3px solid var(--ink); border-bottom: 3px solid var(--ink); transform: skewX(30deg) rotate(45deg); }
-
-  /* how-to-read note and status tag */
-  .legend { position: fixed; left: 26px; top: 128px; z-index: 2; width: 300px; padding: 14px 16px 12px; background: var(--paper);
-    border: 3px solid var(--ink); border-radius: 12px 6px 14px 8px; transform: rotate(-1.6deg); box-shadow: 5px 6px 0 rgba(35,48,31,.55);
-    font: 19px/1.2 "Gochi Hand", cursive; color: #3e3626; }
-  .legend div { display: flex; gap: 10px; align-items: center; margin: 4px 0; }
-  .legend svg { flex: 0 0 auto; }
-  .status { position: fixed; right: 26px; bottom: 22px; z-index: 2; padding: 8px 16px; background: var(--wood);
-    border: 3px solid var(--ink); border-radius: 10px 14px 8px 12px; box-shadow: 0 4px 0 var(--ink);
-    font: 400 18px/1 "Luckiest Guy", sans-serif; color: var(--cream); letter-spacing: .5px; display: flex; align-items: center; gap: 9px; }
-  .status .dot { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--ink); background: #8a8a8a; }
-  .status.live .dot { background: #7be36b; animation: pulse 1.6s ease-in-out infinite; }
-  @keyframes pulse { 50% { box-shadow: 0 0 0 6px rgba(123, 227, 107, .25); } }
-
-  @media (max-width: 900px) {
-    .logo { left: 16px; top: 12px; } .logo h1 { font-size: 30px; } .logo p { display: none; }
-    .sign-wrap { width: calc(100vw - 32px); }
-    .sign { min-width: 0; padding: 10px 16px 12px; margin-top: 66px; }
-    .sign h2 { font-size: clamp(30px, 10vw, 56px); } .sign .sub { font-size: 19px; }
-    .sign::before { left: 26px; } .sign::after { right: 26px; } .nail.l { left: 20px; } .nail.r { right: 20px; }
-    /* compact notes strip at the bottom: what the Wi-Fi feels + the meter */
-    .notes { top: auto; bottom: 64px; right: 16px; left: 16px; width: auto; transform: rotate(-.6deg); padding: 16px 16px 10px; }
-    .notes h3, .notes .label, #clock, .quote { display: none; }
-    .notes .big { font-size: 26px; }
-    .legend { display: none; }
-    .status { right: 16px; bottom: 14px; }
-    .bubble { max-width: calc(100vw - 32px); left: 16px !important; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { animation: none !important; transition: none !important; }
-  }
+  html, body { margin: 0; height: 100%; background: #1a1c2c; overflow: hidden; }
+  canvas { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    image-rendering: pixelated; image-rendering: crisp-edges; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 </style>
 </head>
 <body>
-
-<svg id="swamp" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
-  <defs>
-    <!-- hand-drawn wobble: nudges every edge a little, so nothing looks machine-perfect -->
-    <filter id="wobble" x="-5%" y="-5%" width="110%" height="110%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="2" seed="7" result="n"/>
-      <feDisplacementMap in="SourceGraphic" in2="n" scale="5"/>
-    </filter>
-    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" style="stop-color: var(--sky-top)"/><stop offset="1" style="stop-color: var(--sky-bot)"/>
-    </linearGradient>
-    <linearGradient id="water" gradientUnits="userSpaceOnUse" x1="0" y1="556" x2="0" y2="900">
-      <stop offset="0" style="stop-color: var(--water-top)"/><stop offset="1" style="stop-color: var(--water-bot)"/>
-    </linearGradient>
-    <radialGradient id="glow"><stop offset="0" stop-color="#ffd27a" stop-opacity=".85"/><stop offset="1" stop-color="#ffd27a" stop-opacity="0"/></radialGradient>
-    <radialGradient id="sunglow"><stop offset="0" style="stop-color: var(--sun-glow)"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
-  </defs>
-
-  <rect width="1600" height="900" fill="url(#sky)"/>
-  <g id="stars"></g>
-  <circle cx="520" cy="330" r="150" fill="url(#sunglow)"/>
-  <circle cx="520" cy="330" r="56" class="fill-t" style="fill: var(--sun)" stroke="var(--ink)" stroke-width="4" filter="url(#wobble)"/>
-  <g class="drift" opacity=".9">
-    <path transform="translate(1000 -96)" d="M180 150c10-26 52-30 66-6 14-20 52-14 56 12 26 0 34 30 10 38H170c-26-4-22-40 10-44z" fill="#fff8ea" stroke="var(--ink)" stroke-width="4" filter="url(#wobble)"/>
-    <path transform="translate(-330 230)" d="M760 110c8-20 40-24 52-5 11-15 40-11 44 9 20 0 26 24 8 30H752c-20-3-17-31 8-34z" fill="#fff8ea" stroke="var(--ink)" stroke-width="4" filter="url(#wobble)"/>
-  </g>
-
-  <g id="far" filter="url(#wobble)"></g>
-  <g id="mid" filter="url(#wobble)"></g>
-
-  <!-- the water -->
-  <path d="M0 560 Q 400 548 800 560 T 1600 556 V 900 H 0 Z" fill="url(#water)" stroke="var(--ink)" stroke-width="4"/>
-  <g id="shimmer" class="drift" stroke="var(--shimmer)" stroke-width="4" stroke-linecap="round"></g>
-
-  <!-- left bank: tent + campfire -->
-  <g filter="url(#wobble)">
-    <path d="M-20 530 C 120 490 360 500 560 560 C 520 600 300 610 -20 612 Z" class="fill-t" style="fill: var(--bank)" stroke="var(--ink)" stroke-width="4"/>
-    <path d="M-20 590 C 160 580 330 590 470 588" fill="none" style="stroke: var(--bank-dark)" stroke-width="6" stroke-linecap="round"/>
-    <path d="M120 528 L 220 400 L 320 528 Z" fill="#e8a23c" stroke="var(--ink)" stroke-width="4" stroke-linejoin="round"/>
-    <path d="M220 400 L 196 528 L 244 528 Z" fill="#b8722a" stroke="var(--ink)" stroke-width="4" stroke-linejoin="round"/>
-    <path d="M220 400 L 220 372 L 252 382 L 220 392" fill="#e5483d" stroke="var(--ink)" stroke-width="3" stroke-linejoin="round"/>
-    <path d="M360 552 l 62 -16 M 364 536 l 58 18" stroke="#6b3f1f" stroke-width="12" stroke-linecap="round"/>
-    <path d="M360 552 l 62 -16 M 364 536 l 58 18" stroke="var(--ink)" stroke-width="3" stroke-linecap="round" fill="none" opacity=".5"/>
-  </g>
-  <circle cx="392" cy="520" r="70" fill="url(#glow)"/>
-  <path class="flame" d="M392 540 C 368 520 378 494 392 470 C 404 492 418 518 392 540 Z" fill="#f5b83d" stroke="var(--ink)" stroke-width="3.5"/>
-  <path class="flame b" d="M392 538 C 380 526 384 510 392 496 C 400 510 404 526 392 538 Z" fill="#fff0a8"/>
-
-  <!-- right dock + lantern (the transmitter) -->
-  <g filter="url(#wobble)">
-    <rect x="1060" y="586" width="560" height="22" rx="4" fill="#a8703f" stroke="var(--ink)" stroke-width="4"/>
-    <path d="M1105 586 v 22 M 1150 586 v 22 M 1205 586 v 22 M 1250 586 v 22 M 1295 586 v 22 M 1340 586 v 22 M 1385 586 v 22 M 1430 586 v 22 M 1475 586 v 22 M 1520 586 v 22 M 1565 586 v 22" stroke="var(--ink)" stroke-width="2.5" opacity=".6"/>
-    <rect x="1086" y="440" width="22" height="210" rx="4" fill="#8a5a30" stroke="var(--ink)" stroke-width="4"/>
-    <rect x="1470" y="572" width="20" height="90" rx="4" fill="#8a5a30" stroke="var(--ink)" stroke-width="4"/>
-    <path d="M1097 452 h 52 v 18" fill="none" stroke="var(--ink)" stroke-width="5" stroke-linecap="round"/>
-  </g>
-  <g id="lantern">
-    <circle cx="1149" cy="500" r="80" fill="url(#glow)"/>
-    <circle class="ring" cx="1149" cy="500" r="36" fill="none" stroke="#ffe7a3" stroke-width="3"/>
-    <circle class="ring r2" cx="1149" cy="500" r="36" fill="none" stroke="#ffe7a3" stroke-width="3"/>
-    <circle class="ring r3" cx="1149" cy="500" r="36" fill="none" stroke="#ffe7a3" stroke-width="3"/>
-    <path d="M1136 474 h 26 l 6 10 v 32 l -6 8 h -26 l -6 -8 v -32 z" fill="#ffd96e" stroke="var(--ink)" stroke-width="4" stroke-linejoin="round"/>
-    <path d="M1134 484 h 30 M 1134 514 h 30" stroke="var(--ink)" stroke-width="3"/>
-  </g>
-
-  <!-- lily pads -->
-  <g filter="url(#wobble)" stroke="var(--ink)" stroke-width="3.5">
-    <path d="M640 760 a 46 18 0 1 0 40 -12 l -40 12 z" fill="#6fae4f"/>
-    <path d="M940 812 a 56 21 0 1 1 -46 -14 l 46 14 z" fill="#5f9f45"/>
-    <path d="M1380 724 a 40 15 0 1 0 34 -10 l -34 10 z" fill="#6fae4f"/>
-    <path d="M928 796 c -8 -22 4 -30 12 -20 c 6 -14 22 -8 16 8 c 14 -2 16 14 2 18 z" fill="#f4a6b8"/>
-  </g>
-
-  <!-- the 3 bobbers (= the 3 Wi-Fi receivers); JS moves them -->
-  <g id="bobbers"></g>
-
-  <!-- the gator -->
-  <g id="gator">
-    <g filter="url(#wobble)" stroke="var(--ink)" stroke-width="4" stroke-linejoin="round">
-      <path id="jaw" d="M300 742 C 360 752 470 750 528 736 C 520 760 470 774 380 770 C 330 768 304 760 300 742 Z" fill="#4d8a3c"/>
-      <g id="teeth" fill="#fffbe8" stroke-width="2.5">
-        <path d="M360 744 l 8 14 l 8 -14 z M 400 746 l 8 14 l 8 -14 z M 440 744 l 8 14 l 8 -14 z M 480 740 l 8 13 l 8 -13 z"/>
-      </g>
-      <path d="M270 744 C 280 700 340 686 420 690 C 480 692 524 706 540 728 C 520 742 470 744 400 744 C 340 744 296 748 270 744 Z" fill="#5ea047"/>
-      <path d="M196 742 l 12 -16 l 12 16 M 226 744 l 12 -18 l 12 18 M 256 744 l 11 -15 l 11 15" fill="#4d8a3c"/>
-      <path d="M320 700 c 14 -6 26 -6 38 -2 M 380 694 c 14 -4 26 -4 38 0" fill="none" stroke-width="3" opacity=".55"/>
-      <circle cx="522" cy="716" r="4" fill="var(--ink)"/>
-      <circle cx="534" cy="720" r="3.5" fill="var(--ink)"/>
-      <!-- eyes -->
-      <ellipse cx="330" cy="684" rx="26" ry="24" fill="#5ea047"/>
-      <ellipse cx="392" cy="680" rx="26" ry="24" fill="#5ea047"/>
-    </g>
-    <g stroke="var(--ink)" stroke-width="3">
-      <circle cx="330" cy="680" r="15" fill="#fff6c9"/>
-      <circle cx="392" cy="676" r="15" fill="#fff6c9"/>
-      <ellipse class="pupil" cx="330" cy="680" rx="4" ry="10" fill="var(--ink)" stroke="none"/>
-      <ellipse class="pupil" cx="392" cy="676" rx="4" ry="10" fill="var(--ink)" stroke="none"/>
-      <path class="lid" d="M314 680 a 16 16 0 1 0 32 0 a 16 16 0 1 0 -32 0 z" fill="#4d8a3c"/>
-      <path class="lid" d="M376 676 a 16 16 0 1 0 32 0 a 16 16 0 1 0 -32 0 z" fill="#4d8a3c"/>
-      <path class="shut" d="M319 684 q 11 8 22 0 M 381 680 q 11 8 22 0" fill="none" stroke-width="3.5" stroke-linecap="round"/>
-    </g>
-    <g class="zzz" font-family="Luckiest Guy, sans-serif" fill="var(--cream)" stroke="var(--ink)" stroke-width="2" paint-order="stroke">
-      <text x="420" y="640" font-size="30">z</text><text x="440" y="616" font-size="24">z</text><text x="456" y="596" font-size="18">z</text>
-    </g>
-    <!-- splash droplets for a catch -->
-    <g fill="#bfe8ee" stroke="var(--ink)" stroke-width="2.5">
-      <circle class="splash" cx="300" cy="730" r="9" style="--dx:-50px"/><circle class="splash" cx="350" cy="720" r="7" style="--dx:-20px"/>
-      <circle class="splash" cx="470" cy="722" r="8" style="--dx:30px"/><circle class="splash" cx="530" cy="730" r="10" style="--dx:60px"/>
-    </g>
-  </g>
-  <!-- water line over the gator's belly, so it sits IN the swamp -->
-  <path d="M180 748 C 320 740 470 742 560 748 L 560 792 L 180 792 Z" fill="url(#water)"/>
-  <path d="M186 748 C 330 740 470 742 556 748" fill="none" stroke="var(--shimmer)" stroke-width="5" stroke-linecap="round"/>
-
-  <!-- foreground cattails -->
-  <g id="reeds" stroke="var(--ink)" stroke-width="3.5" stroke-linecap="round"></g>
-
-  <g id="flies" fill="#fff59a"></g>
-  <rect id="mist" x="0" y="380" width="1600" height="320" fill="#f6f7ee" opacity="0" filter="url(#wobble)"/>
-  <rect id="tint" width="1600" height="900" pointer-events="none"/>
-</svg>
-
-<header class="logo">
-  <h1>WiFind</h1>
-  <p>the swamp can feel you move</p>
-</header>
-
-<div class="sign-wrap">
-  <div class="sign" id="sign">
-    <span class="nail l"></span><span class="nail r"></span>
-    <h2 id="signText">Gone fishin'</h2>
-    <div class="sub" id="signSub">the booth laptop is napping</div>
-  </div>
-</div>
-
-<aside class="notes" aria-live="polite">
-  <h3>Field notes</h3>
-  <div class="label">the Wi-Fi feels…</div>
-  <div class="big" id="feels">nothing yet</div>
-  <div class="label">wiggle-o-meter</div>
-  <div class="meter" id="meter"><i id="meterFill"></i><b id="meterTick"></b></div>
-  <div class="meter-note"><span>still as a log</span><span>freeze line ↑</span><span>splashing</span></div>
-  <div class="label">this round</div>
-  <div class="big" id="clock">–</div>
-  <div class="label">the gator says</div>
-  <div class="quote" id="quote">“Shh. I'm resting my eyes.”</div>
-</aside>
-
-<div class="bubble" id="bubble"></div>
-
-<aside class="legend">
-  <div>
-    <svg width="34" height="38" viewBox="0 0 34 38"><path d="M17 2v8" stroke="#23301f" stroke-width="3"/><circle cx="17" cy="22" r="13" fill="#fff" stroke="#23301f" stroke-width="3"/><path d="M4 22a13 13 0 0 1 26 0z" fill="#e5483d" stroke="#23301f" stroke-width="3"/></svg>
-    <span>each bobber is a Wi-Fi receiver. It dips when the Wi-Fi feels you move.</span>
-  </div>
-  <div>
-    <svg width="34" height="38" viewBox="0 0 34 38"><path d="M9 6h16l4 6v18l-4 5H9l-4-5V12z" fill="#ffd96e" stroke="#23301f" stroke-width="3"/></svg>
-    <span>the lantern is the transmitter. No camera anywhere.</span>
-  </div>
-</aside>
-
-<div class="status" id="status"><span class="dot"></span><span id="statusText">booth is napping</span></div>
+<canvas id="screen" aria-hidden="true"></canvas>
+<div class="sr" id="live" aria-live="polite"></div>
 
 <script>
 (() => {
   "use strict";
-  const $ = (id) => document.getElementById(id);
-  const NS = "http://www.w3.org/2000/svg";
-  const root = document.documentElement;
-  const el = (tag, attrs, parent) => {
-    const n = document.createElementNS(NS, tag);
-    for (const k in attrs) n.setAttribute(k, attrs[k]);
-    if (parent) parent.appendChild(n);
-    return n;
+
+  // ------------------------------------------------------------- palette (20 colours)
+  const P = {
+    K: "#1a1c2c", W: "#f4f4f4", L: "#94b0c2", G: "#566c86", D: "#333c57", N: "#29366f", B: "#3b5dc9",
+    S: "#41a6f6", C: "#73eff7", T: "#257179", g: "#38b764", l: "#a7f070", f: "#1e4d2b", m: "#6a8f3f",
+    Y: "#ffcd75", O: "#ef7d57", R: "#b13e53", P: "#5d275d", w: "#8b5a3c", d: "#5c3a28",
   };
-  // seeded random, so the swamp looks the same on every load (hand-placed, not shuffling)
-  let seed = 11;
+
+  // one look per moment: palette keys for each part of the scene
+  const THEMES = {
+    dusk:  { sky: ["O", "Y"], sun: "Y", far: "m", canopy: "f", canopyHi: "g", moss: "m", trunk: "d",
+             water: "T", waterHi: "C", deep: "N", bank: "g", bankHi: "l", cloud: "W", cloudLo: "Y", stars: 0, flies: 4, glow: 0 },
+    day:   { sky: ["S", "C"], sun: "Y", far: "m", canopy: "f", canopyHi: "g", moss: "m", trunk: "d",
+             water: "T", waterHi: "C", deep: "N", bank: "g", bankHi: "l", cloud: "W", cloudLo: "L", stars: 0, flies: 0, glow: 0 },
+    red:   { sky: ["R", "O"], sun: "Y", far: "P", canopy: "f", canopyHi: "m", moss: "m", trunk: "d",
+             water: "D", waterHi: "O", deep: "K", bank: "f", bankHi: "m", cloud: "O", cloudLo: "P", stars: 0, flies: 0, glow: 1 },
+    won:   { sky: ["P", "R"], sun: "Y", far: "D", canopy: "f", canopyHi: "m", moss: "m", trunk: "d",
+             water: "N", waterHi: "Y", deep: "K", bank: "f", bankHi: "m", cloud: "O", cloudLo: "R", stars: 1, flies: 18, glow: 1 },
+    night: { sky: ["K", "N"], sun: "W", far: "D", canopy: "D", canopyHi: "G", moss: "G", trunk: "d",
+             water: "D", waterHi: "L", deep: "K", bank: "D", bankHi: "G", cloud: "G", cloudLo: "D", stars: 1, flies: 14, glow: 1 },
+    mist:  { sky: ["L", "W"], sun: "W", far: "G", canopy: "f", canopyHi: "g", moss: "m", trunk: "d",
+             water: "T", waterHi: "W", deep: "N", bank: "g", bankHi: "l", cloud: "W", cloudLo: "L", stars: 0, flies: 0, glow: 0, mist: 1 },
+    grey:  { sky: ["G", "L"], sun: "W", far: "D", canopy: "D", canopyHi: "G", moss: "G", trunk: "d",
+             water: "D", waterHi: "L", deep: "K", bank: "D", bankHi: "G", cloud: "L", cloudLo: "G", stars: 0, flies: 0, glow: 0 },
+  };
+
+  // what each game moment looks like and what the gator says
+  const SCENES = {
+    offline:   { theme: "night", title: "GONE FISHIN'", panel: "N", say: "THE BOOTH IS ASLEEP. COME BACK SOON AND TRY TO SNEAK PAST ME!" },
+    lobby:     { theme: "dusk", title: "STEP OUT!", panel: "d", say: "ROUND OVER! HIDER, COME ON OUT OF THE BOOTH." },
+    scanning:  { theme: "mist", title: "LISTENING...", panel: "B", say: "SHH... I'M LEARNING WHAT AN EMPTY SWAMP SOUNDS LIKE." },
+    hide:      { theme: "dusk", title: "HIDE!", panel: "O", say: "NEXT HIDER, CLIMB IN BEHIND THE CURTAIN AND GET COMFY." },
+    countdown: { theme: "dusk", title: "GET READY!", panel: "Y", ink: "K", say: "THE GATOR IS WAKING UP... 3... 2... 1..." },
+    green:     { theme: "day", title: "GREEN LIGHT!", panel: "g", say: "GREEN LIGHT! PADDLE AWAY WHILE I NAP." },
+    red:       { theme: "red", title: "RED LIGHT!", panel: "R", say: "RED LIGHT! FREEZE... I'M WATCHING THE WATER." },
+    out:       { theme: "red", title: "CHOMP!", panel: "R", say: "CHOMP! THE WI-FI FELT THAT WIGGLE." },
+    won:       { theme: "won", title: "YOU MADE IT!", panel: "Y", ink: "K", say: "YOU MADE IT! I NEVER EVEN SAW YOU." },
+    paused:    { theme: "grey", title: "PAUSED", panel: "G", say: "PAUSED. EVERYBODY FREEZE... FOR REAL THIS TIME." },
+  };
+  const PHASE_SCENE = { LOBBY: "lobby", SCAN: "scanning", HIDE: "hide", COUNTDOWN: "countdown", GREEN: "green",
+    RED: "red", OUT: "out", WON: "won", PAUSED: "paused" };
+  const FEELS = { MOVING: ["A WIGGLE!", "O"], STILL: ["STILLNESS", "l"], EMPTY: ["NOBODY HOME", "L"],
+    UNCALIBRATED: ["NEEDS A SCAN", "L"], SCANNING: ["LISTENING", "C"], OFFLINE: ["SNOOZING", "L"] };
+
+  // ------------------------------------------------------------- 5x7 bitmap font
+  const GLYPHS = {
+    A: "01110 10001 10001 11111 10001 10001 10001", B: "11110 10001 10001 11110 10001 10001 11110",
+    C: "01110 10001 10000 10000 10000 10001 01110", D: "11100 10010 10001 10001 10001 10010 11100",
+    E: "11111 10000 10000 11110 10000 10000 11111", F: "11111 10000 10000 11110 10000 10000 10000",
+    G: "01110 10001 10000 10111 10001 10001 01111", H: "10001 10001 10001 11111 10001 10001 10001",
+    I: "111 010 010 010 010 010 111", J: "00111 00010 00010 00010 00010 10010 01100",
+    K: "10001 10010 10100 11000 10100 10010 10001", L: "10000 10000 10000 10000 10000 10000 11111",
+    M: "10001 11011 10101 10101 10001 10001 10001", N: "10001 10001 11001 10101 10011 10001 10001",
+    O: "01110 10001 10001 10001 10001 10001 01110", P: "11110 10001 10001 11110 10000 10000 10000",
+    Q: "01110 10001 10001 10001 10101 10010 01101", R: "11110 10001 10001 11110 10100 10010 10001",
+    S: "01111 10000 10000 01110 00001 00001 11110", T: "11111 00100 00100 00100 00100 00100 00100",
+    U: "10001 10001 10001 10001 10001 10001 01110", V: "10001 10001 10001 10001 10001 01010 00100",
+    W: "10001 10001 10001 10101 10101 10101 01010", X: "10001 10001 01010 00100 01010 10001 10001",
+    Y: "10001 10001 10001 01010 00100 00100 00100", Z: "11111 00001 00010 00100 01000 10000 11111",
+    0: "01110 10001 10011 10101 11001 10001 01110", 1: "010 110 010 010 010 010 111",
+    2: "01110 10001 00001 00010 00100 01000 11111", 3: "11111 00010 00100 00010 00001 10001 01110",
+    4: "00010 00110 01010 10010 11111 00010 00010", 5: "11111 10000 11110 00001 00001 10001 01110",
+    6: "00110 01000 10000 11110 10001 10001 01110", 7: "11111 00001 00010 00100 01000 01000 01000",
+    8: "01110 10001 10001 01110 10001 10001 01110", 9: "01110 10001 10001 01111 00001 00010 01100",
+    "!": "1 1 1 1 1 0 1", "?": "01110 10001 00001 00010 00100 00000 00100", ".": "0 0 0 0 0 0 1",
+    ",": "00 00 00 00 00 01 10", "'": "1 1 0 0 0 0 0", '"': "101 101 000 000 000 000 000",
+    ":": "0 0 1 0 0 1 0", "-": "000 000 000 111 000 000 000", "/": "00001 00010 00010 00100 01000 01000 10000",
+    "(": "01 10 10 10 10 10 01", ")": "10 01 01 01 01 01 10", "+": "000 000 010 111 010 000 000",
+    "=": "000 000 111 000 111 000 000", "%": "11001 11010 00010 00100 01000 01011 10011", " ": "00 00 00 00 00 00 00",
+  };
+  const FONT = {};
+  for (const [ch, rows] of Object.entries(GLYPHS)) FONT[ch] = rows.split(" ").map((r) => [...r].map(Number));
+
+  // text arrives from the laptop/AI in any case and with any punctuation
+  const tidy = (s) => String(s).toUpperCase().replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/…/g, "...")
+    .replace(/[—–·]/g, "-").replace(/[^A-Z0-9!?.,'":\-/()+=% ]/g, "");
+
+  function textWidth(s, bold) {
+    let w = 0;
+    for (const ch of tidy(s)) w += (FONT[ch] || FONT["?"])[0].length + 1 + (bold ? 1 : 0);
+    return Math.max(0, w - 1);
+  }
+  // one line of text; opts: bold, outline (colour key), shadow (colour key)
+  function text(ctx, s, x, y, col, opts = {}) {
+    s = tidy(s); x = Math.floor(x); y = Math.floor(y);
+    const plot = (ox, oy, c) => {
+      ctx.fillStyle = P[c];
+      let cx = x + ox;
+      for (const ch of s) {
+        const g = FONT[ch] || FONT["?"];
+        for (let r = 0; r < 7; r++) for (let k = 0; k < g[r].length; k++) {
+          if (g[r][k]) ctx.fillRect(cx + k, y + oy + r, opts.bold ? 2 : 1, 1);
+        }
+        cx += g[0].length + 1 + (opts.bold ? 1 : 0);
+      }
+    };
+    if (opts.outline) for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]]) plot(ox, oy, opts.outline);
+    if (opts.shadow) plot(0, 1, opts.shadow);
+    plot(0, 0, col);
+  }
+  function wrap(s, maxW) {
+    const lines = [];
+    let line = "";
+    for (const word of tidy(s).split(" ")) {
+      const t = line ? line + " " + word : word;
+      if (textWidth(t) > maxW && line) { lines.push(line); line = word; } else line = t;
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+
+  // ------------------------------------------------------------- sprites (text grids, "." = see-through)
+  function sprite(ctx, rows, x, y, map = {}) {
+    x = Math.floor(x); y = Math.floor(y);
+    for (let r = 0; r < rows.length; r++) for (let c = 0; c < rows[r].length; c++) {
+      const k = rows[r][c];
+      if (k === ".") continue;
+      ctx.fillStyle = P[map[k] || k];
+      ctx.fillRect(x + c, y + r, 1, 1);
+    }
+  }
+  const BOBBER = ["....K....", "....K....", "...KKK...", "..KRRRK..", ".KRYRRRK.", "KRRRRRRRK", "KWWWWWWWK",
+    "KWWWWWWWK", ".KWWWWWK.", "..KKKKK.."];
+  const BOBBER_ICON = ["...K...", "..KKK..", ".KRRRK.", "KRRYRRK", "KWWWWWK", ".KWWWK.", "..KKK.."];
+  const LANTERN = ["..KKK..", "..K.K..", ".KKKKK.", ".KYYYK.", ".KYWYK.", ".KYYYK.", ".KYYYK.", ".KKKKK."];
+  const PORTRAIT = [ // the gator's face for the dialog box
+    "...KKKK....KKKK...",
+    "..KggggK..KggggK..",
+    "..KgWWKK..KgWWKK..",
+    "..KgWKKK..KgWKKK..",
+    ".KggggggKKggggggK.",
+    "KgggllllggllllgggK",
+    "KggggggggggggggggK",
+    "KgggggggggggggKgKK",
+    "KggggggggggggggggK",
+    "KWKWKWKWKWKWKWKWKK",
+    "KRRRRRRRRRRRRRRRRK",
+    "KWKWKWKWKWKWKWKWKK",
+    "KggggggggggggggggK",
+    "KfffffffffffffffK.",
+    ".KKKKKKKKKKKKKKKK.",
+  ];
+  const FLAMES = [
+    ["...Y...", "..YOY..", "..YOY..", ".YOROY.", ".YOROY.", "..YOY.."],
+    ["..Y....", "..YY...", ".YOOY..", ".YORY..", ".YOROY.", "..YOY.."],
+    ["....Y..", "...YY..", "..YOOY.", "..YROY.", ".YOROY.", "..YOY.."],
+  ];
+
+  // ------------------------------------------------------------- drawing helpers (always whole pixels)
+  const rect = (ctx, c, x, y, w, h) => { ctx.fillStyle = P[c]; ctx.fillRect(Math.floor(x), Math.floor(y), Math.floor(w), Math.floor(h)); };
+  function ellipse(ctx, c, cx, cy, rx, ry) {       // filled, scanline by scanline
+    cx = Math.floor(cx); cy = Math.floor(cy); rx = Math.floor(rx); ry = Math.floor(ry);
+    ctx.fillStyle = P[c];
+    for (let y = -ry; y <= ry; y++) {
+      const half = Math.round(rx * Math.sqrt(Math.max(0, 1 - (y * y) / (ry * ry + 0.0001))));
+      ctx.fillRect(cx - half, cy + y, half * 2 + 1, 1);
+    }
+  }
+  function ring(ctx, c, cx, cy, r, every = 1) {     // midpoint circle; every=2+ -> dotted (fading)
+    ctx.fillStyle = P[c];
+    let x = r, y = 0, err = 1 - r, n = 0;
+    while (x >= y) {
+      if (n++ % every === 0) for (const [a, b] of [[x, y], [y, x], [-y, x], [-x, y], [-x, -y], [-y, -x], [y, -x], [x, -y]]) ctx.fillRect(cx + a, cy + b, 1, 1);
+      y++;
+      if (err < 0) err += 2 * y + 1; else { x--; err += 2 * (y - x) + 1; }
+    }
+  }
+  // ordered dither between two colours (4x4 Bayer): an even pixel pattern, never a smooth blend
+  const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+  const ditherPick = (x, y, t) => t * 16 > BAYER[(y & 3) * 4 + (x & 3)];
+  function windowBox(ctx, x, y, w, h, fill = "N") { // SNES-style window: dark rim, white + grey border
+    rect(ctx, "K", x + 1, y, w - 2, h); rect(ctx, "K", x, y + 1, w, h - 2);
+    rect(ctx, "W", x + 1, y + 1, w - 2, h - 2);
+    rect(ctx, "L", x + 2, y + 2, w - 4, h - 4);
+    rect(ctx, fill, x + 3, y + 3, w - 6, h - 6);
+  }
+
+  // seeded random: the swamp is laid out the same on every load
+  let seed = 7;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 
-  // ---------------------------------------------------------------- draw the swamp
-  function cypress(g, x, base, h, w, fill, mossy) {
-    const top = base - h;
-    el("path", { d: `M${x - w * .5} ${base} C ${x - w * .2} ${base - h * .25} ${x - w * .12} ${top + h * .4} ${x - w * .08} ${top + 30}
-      L ${x + w * .08} ${top + 30} C ${x + w * .12} ${top + h * .4} ${x + w * .2} ${base - h * .25} ${x + w * .5} ${base} Z`,
-      fill: "#6b5134", stroke: "var(--ink)", "stroke-width": 4 }, g);
-    for (let i = 0; i < 4; i++) {   // flat-topped, layered canopy: the cypress look
-      const cy = top + 18 + i * 22, cw = w * (1.5 + i * .55) + rnd() * 20;
-      el("ellipse", { cx: x + (rnd() - .5) * 26, cy, rx: cw * .5, ry: 22 + rnd() * 6, class: "fill-t",
-        style: `fill: var(${i % 2 ? "--mid-dark" : "--mid"})`, stroke: "var(--ink)", "stroke-width": 4 }, g);
+  // ------------------------------------------------------------- the canvas
+  const screen = document.getElementById("screen");
+  const ctx = screen.getContext("2d");
+  let W = 320, H = 180, SCALE = 4, waterY = 114, cx = 160;
+  const bg = document.createElement("canvas");
+  const bctx = bg.getContext("2d");
+  let bgKey = "";
+
+  function resize() {
+    const vw = innerWidth, vh = innerHeight;
+    SCALE = Math.max(2, Math.floor(Math.min(vw / 300, vh / 170)));
+    W = Math.floor(vw / SCALE); H = Math.floor(vh / SCALE);
+    screen.width = W; screen.height = H;
+    screen.style.width = W * SCALE + "px"; screen.style.height = H * SCALE + "px";
+    ctx.imageSmoothingEnabled = false;
+    waterY = H - 66; cx = Math.floor(W / 2);
+    bgKey = "";
+  }
+  addEventListener("resize", resize);
+  resize();
+  const X = (designX) => cx + designX - 160; // the stage is designed 320 wide, centred
+
+  // ------------------------------------------------------------- static background (cached per look + size)
+  function drawBackground(th) {
+    bg.width = W; bg.height = H;
+    const c = bctx;
+    seed = 7;
+    // sky: two colours, dithered where they meet
+    for (let y = 0; y < waterY; y++) {
+      const t = (y / waterY - 0.38) / 0.3;
+      for (let x = 0; x < W; x++) {
+        c.fillStyle = P[t <= 0 ? th.sky[0] : t >= 1 ? th.sky[1] : (ditherPick(x, y, t) ? th.sky[1] : th.sky[0])];
+        c.fillRect(x, y, 1, 1);
+      }
     }
-    if (mossy) for (let i = 0; i < 5; i++) {   // Spanish moss
-      const mx = x + (rnd() - .5) * w * 2.2, my = top + 50 + rnd() * 50, len = 40 + rnd() * 60;
-      el("path", { d: `M${mx} ${my} q 8 ${len * .3} -2 ${len * .55} q -8 ${len * .25} 3 ${len * .45}`, fill: "none",
-        class: "fill-t", style: "stroke: var(--moss)", "stroke-width": 5, "stroke-linecap": "round" }, g);
+    for (let i = 0; i < W / 4; i++) {
+      const tw = rnd() < 0.2, sx = Math.floor(rnd() * W), sy = Math.floor(rnd() * waterY * 0.55);
+      if (th.stars) rect(c, tw ? "Y" : "W", sx, sy, 1, 1);
     }
+    // sun or moon, low behind the trees
+    const sx = X(92), sy = waterY - 34;
+    ellipse(c, th.sun, sx, sy, 9, 9);
+    if (th.sun === "W") { rect(c, "L", sx - 3, sy - 2, 2, 2); rect(c, "L", sx + 2, sy + 3, 3, 2); rect(c, "L", sx + 4, sy - 4, 1, 1); }
+    else { rect(c, "W", sx - 4, sy - 5, 3, 1); rect(c, "W", sx - 5, sy - 4, 1, 2); }
+    // far treeline: rounded treetops, no outline (it's far away)
+    let x = 0;
+    while (x < W) {
+      const r = 5 + Math.floor(rnd() * 6), h = 10 + Math.floor(rnd() * 12);
+      ellipse(c, th.far, x + r, waterY - h, r, r);
+      rect(c, th.far, x, waterY - h, r * 2 + 1, h);
+      x += r * 2 - 2;
+    }
+    // cypress trees: flared trunks, flat layered canopies, hanging moss
+    for (const [dx, h, w] of [[124, 58, 6], [152, 46, 5], [188, 66, 7], [222, 50, 5], [300, 70, 7], [24, 40, 4]]) {
+      const tx = X(dx), base = waterY;
+      for (let r = 0; r < h; r++) {           // trunk, widening toward the water
+        const half = Math.round(w / 2 + Math.pow(Math.max(0, r - h * 0.6) / (h * 0.4), 2) * w);
+        rect(c, "K", tx - half - 1, base - h + r, half * 2 + 3, 1);
+        rect(c, th.trunk, tx - half, base - h + r, half * 2 + 1, 1);
+        rect(c, "w", tx - half, base - h + r, 1, 1);
+      }
+      const ct = base - h - 6;
+      for (let i = 0; i < 3; i++) {           // canopy layers: outline, fill, a lit top edge
+        const ly = ct + i * 7, lx = tx + Math.round((rnd() - 0.5) * 6), rx = w * 2 + 4 + i * 4;
+        ellipse(c, "K", lx, ly, rx + 1, 4);
+        ellipse(c, th.canopy, lx, ly, rx, 3);
+        rect(c, th.canopyHi, lx - rx + 3, ly - 3, rx * 2 - 5, 1);
+        rect(c, th.canopyHi, lx - rx + 1, ly - 2, 3, 1);
+      }
+      for (let i = 0; i < 6; i++) {           // moss: dotted strands
+        const mx = tx + Math.round((rnd() - 0.5) * w * 6), len = 4 + Math.floor(rnd() * 9);
+        for (let k = 0; k < len; k += 2) rect(c, th.moss, mx + (k % 4 === 0 ? 0 : 1), ct + 18 + k, 1, 1);
+      }
+    }
+    // water: a lit edge, then deeper water lower down (dithered)
+    for (let y = waterY; y < H; y++) {
+      const t = (y - waterY - 26) / 18;
+      for (let x2 = 0; x2 < W; x2++) {
+        c.fillStyle = P[t <= 0 ? th.water : t >= 1 ? th.deep : (ditherPick(x2, y, t) ? th.deep : th.water)];
+        c.fillRect(x2, y, 1, 1);
+      }
+    }
+    rect(c, th.waterHi, 0, waterY, W, 1);
+    // left bank with grass
+    const bankEnd = X(108);
+    for (let x2 = 0; x2 <= bankEnd; x2++) {
+      const t = Math.max(0, (x2 - (bankEnd - 30)) / 30);
+      const topY = waterY - 8 + Math.round(t * t * 10);
+      rect(c, "K", x2, topY - 1, 1, 1);
+      rect(c, th.bank, x2, topY, 1, waterY + 4 - topY);
+      rect(c, th.bankHi, x2, topY, 1, 1);
+      if (x2 % 7 === 3) rect(c, th.bankHi, x2, topY - 2, 1, 2);
+    }
+    rect(c, "K", 0, waterY + 4, bankEnd + 1, 1);
+    // tent
+    const tx = X(30), ty = waterY - 26;
+    for (let r = 0; r < 18; r++) {
+      const half = Math.round(r * 0.75);
+      rect(c, "K", tx - half - 1, ty + r, half * 2 + 3, 1);
+      rect(c, "O", tx - half, ty + r, half * 2 + 1, 1);
+      rect(c, "Y", tx - half, ty + r, Math.max(1, Math.round(half * 0.5)), 1);
+      if (r > 6) { const dh = Math.round((r - 6) * 0.45); rect(c, "d", tx - dh, ty + r, dh * 2 + 1, 1); }
+    }
+    rect(c, "K", tx, ty - 6, 1, 6); rect(c, "R", tx + 1, ty - 6, 4, 2); rect(c, "K", tx - 14, ty + 18, 29, 1);
+    // campfire logs (the flames move, so they're drawn every frame)
+    const fx = X(60), fy = waterY - 6;
+    rect(c, "K", fx - 5, fy, 11, 3); rect(c, "d", fx - 4, fy + 1, 9, 1); rect(c, "w", fx - 3, fy + 1, 2, 1);
+    // dock + lantern post (the lantern glows, so it's drawn every frame)
+    const dx = X(236);
+    rect(c, "K", dx, waterY - 5, W - dx, 5);
+    rect(c, "w", dx + 1, waterY - 4, W - dx - 1, 3);
+    for (let p = dx + 6; p < W; p += 7) rect(c, "d", p, waterY - 4, 1, 3);
+    for (const px of [dx + 4, dx + 30, dx + 58]) { rect(c, "K", px - 1, waterY, 5, 8); rect(c, "d", px, waterY, 3, 7); }
+    const postX = X(244);
+    rect(c, "K", postX - 1, waterY - 34, 5, 30); rect(c, "d", postX, waterY - 33, 3, 29); rect(c, "w", postX, waterY - 33, 1, 29);
+    rect(c, "K", postX + 1, waterY - 34, 9, 1); rect(c, "K", postX + 9, waterY - 34, 1, 3);
+    // lily pads + a flower
+    for (const [lx, ly, r] of [[136, 26, 6], [200, 24, 7], [282, 16, 5], [72, 18, 5]]) {
+      const px = X(lx), py = waterY + ly;
+      ellipse(c, "K", px, py, r + 1, 2); ellipse(c, "g", px, py, r, 1); rect(c, "l", px - r + 2, py - 1, r, 1);
+      rect(c, th.water, px + r - 3, py, 3, 1);
+    }
+    const fl = X(202), fly = waterY + 21;
+    rect(c, "W", fl - 1, fly - 1, 3, 1); rect(c, "W", fl - 2, fly, 5, 1); rect(c, "Y", fl, fly, 1, 1);
   }
-  const far = $("far"), mid = $("mid");
-  let d = "M0 560 L 0 470 ";
-  for (let x = 0; x < 1600; x += 70) {   // a row of rounded treetops
-    const h = 455 - rnd() * 55, w = 70;
-    d += `Q ${x + w * .1} ${h - 30} ${x + w * .5} ${h - 34} Q ${x + w * .9} ${h - 30} ${x + w} ${470 - rnd() * 20} `;
-  }
-  el("path", { d: d + "L 1600 560 Z", class: "fill-t", style: "fill: var(--far)", stroke: "var(--ink)", "stroke-width": 4 }, far);
-  [[620, 560, 300, 60], [760, 560, 250, 50], [900, 562, 330, 66], [1060, 560, 270, 52], [1500, 566, 340, 70]].forEach(
-    ([x, b, h, w]) => cypress(mid, x, b, h, w, null, true));
 
-  const shimmer = $("shimmer");
-  for (let i = 0; i < 26; i++) {
-    const x = rnd() * 1600, y = 590 + rnd() * 290, l = 20 + rnd() * 60;
-    el("path", { d: `M${x} ${y} h ${l}` }, shimmer);
-  }
-
-  const reeds = $("reeds");
-  [[40, 900, 240], [80, 900, 300], [118, 900, 210], [1470, 900, 260], [1520, 900, 320], [1566, 900, 230], [700, 900, 150]].forEach(([x, b, h], i) => {
-    const g = el("g", { class: "sway", style: `animation-delay:${-i * .7}s` }, reeds);
-    el("path", { d: `M${x} ${b} Q ${x + 6} ${b - h * .5} ${x + (i % 2 ? 10 : -6)} ${b - h}`, fill: "none", stroke: "#4f6b2f", "stroke-width": 7 }, g);
-    el("path", { d: `M${x} ${b} Q ${x + 6} ${b - h * .5} ${x + (i % 2 ? 10 : -6)} ${b - h}`, fill: "none", stroke: "var(--ink)", "stroke-width": 2, opacity: .6 }, g);
-    el("rect", { x: x + (i % 2 ? 2 : -14) , y: b - h + 18, width: 16, height: 54, rx: 8, fill: "#8a5a2b" }, g);
-    el("path", { d: `M${x - 30} ${b} Q ${x - 40} ${b - h * .4} ${x - 70} ${b - h * .55}`, fill: "none", stroke: "#5f8a3a", "stroke-width": 6 }, g);
-  });
-
-  const flies = $("flies");
-  for (let i = 0; i < 22; i++) el("circle", { class: "firefly", cx: 80 + rnd() * 1440, cy: 200 + rnd() * 380, r: 3 + rnd() * 2.5,
-    style: `animation-delay:${(-rnd() * 3).toFixed(2)}s; animation-duration:${(2.2 + rnd() * 2).toFixed(2)}s` }, flies);
-  const stars = $("stars");
-  for (let i = 0; i < 60; i++) el("circle", { cx: rnd() * 1600, cy: rnd() * 380, r: .8 + rnd() * 1.6, fill: "#fff8de" }, stars);
-
-  // bobbers: the 3 receivers
-  const BOB_X = [620, 820, 1010], BOB_Y = 640;
-  const bobbers = BOB_X.map((x, i) => {
-    const g = el("g", {}, $("bobbers"));
-    const ripple1 = el("ellipse", { cx: x, cy: BOB_Y + 16, rx: 30, ry: 7, fill: "none", stroke: "var(--shimmer)", "stroke-width": 4 }, g);
-    const ripple2 = el("ellipse", { cx: x, cy: BOB_Y + 16, rx: 48, ry: 11, fill: "none", stroke: "var(--shimmer)", "stroke-width": 3 }, g);
-    const body = el("g", {}, g);
-    el("path", { d: `M${x} ${BOB_Y - 18} L ${x} ${BOB_Y - 46}`, stroke: "var(--ink)", "stroke-width": 4, "stroke-linecap": "round" }, body);
-    el("circle", { cx: x, cy: BOB_Y, r: 19, fill: "#fffaf0", stroke: "var(--ink)", "stroke-width": 4 }, body);
-    el("path", { d: `M${x - 19} ${BOB_Y} a 19 19 0 0 1 38 0 z`, fill: "#e5483d", stroke: "var(--ink)", "stroke-width": 4, "stroke-linejoin": "round" }, body);
-    el("text", { x, y: BOB_Y + 13, "text-anchor": "middle", "font-family": "Luckiest Guy, sans-serif", "font-size": 13, fill: "var(--ink)" }, body).textContent = i + 1;
-    return { body, ripple1, ripple2, x, shown: 0, target: 0 };
-  });
-
-  // ---------------------------------------------------------------- data
-  const S = { online: false, sense: null, phase: "LOBBY", ai: null, aiSeen: null, roundStart: null, scene: "" };
+  // ------------------------------------------------------------- state from the server
+  const S = { online: false, sense: null, phase: null, roundStart: null, scene: "", sceneAt: 0, ai: null, say: "", sayAt: 0 };
 
   async function get(path) {
     const ctl = new AbortController();
@@ -426,125 +352,272 @@
       return r.ok ? await r.json() : null;
     } catch { return null; } finally { clearTimeout(t); }
   }
-
   async function pollSense() {
     const s = await get("/api/sense");
     S.online = !!s && s.state !== "OFFLINE";
     S.sense = s;
-    render();
   }
   async function pollPhase() {
     const p = await get("/api/phase");
     if (!p) return;
-    if (p.phase === "GREEN" && ["LOBBY", "OUT", "WON", null].includes(S.phase)) S.roundStart = Date.now();
-    if (p.phase === "LOBBY") S.roundStart = null;
+    if (p.phase === "GREEN" && !["GREEN", "RED", "PAUSED"].includes(S.phase)) S.roundStart = Date.now();
+    if (["LOBBY", "SCAN", "HIDE"].includes(p.phase)) S.roundStart = null;
     S.phase = p.phase;
-    render();
   }
   async function pollAi() {
     const a = await get("/api/ai/last");
-    if (a && a.line && a.line !== S.ai) { S.ai = a.line; S.aiSeen = Date.now(); showBubble(a.line); }
+    if (a && a.line && a.line !== S.ai) {
+      const first = S.ai === null;
+      S.ai = a.line;
+      if (!first) { S.say = a.line; S.sayAt = performance.now(); } // only lines that arrive while we watch
+    }
   }
-
-  // ---------------------------------------------------------------- what to show
-  const SCENES = {
-    offline:  ["Gone fishin'", "the booth laptop is napping"],
-    scanning: ["Listening…", "everybody out! learning what an empty swamp sounds like"],
-    lobby:    ["Hop in!", "next player, hide behind the curtain"],
-    green:    ["Green light!", "paddle away, the gator's napping"],
-    red:      ["Red light!", "freeze… the gator is watching the water"],
-    out:      ["CHOMP!", "the Wi-Fi felt that wiggle"],
-    won:      ["You made it!", "not even the gator noticed"],
-  };
-  const FEELS = { MOVING: ["a wiggle!", "moving"], STILL: ["stillness", "still"], EMPTY: ["nobody home", ""],
-    UNCALIBRATED: ["needs a room scan", ""], SCANNING: ["listening…", ""], OFFLINE: ["a snoozing swamp", ""] };
-  const IDLE = ["“Shh. I'm resting my eyes.”", "“I can't see you. I don't need to.”", "“Wi-Fi bounces off you, you know.”",
-    "“Hold still. Stiller. Stiller than that.”"];
-
   function sceneName() {
     if (!S.online) return "offline";
-    const st = S.sense.state;
-    if (st === "SCANNING") return "scanning";
-    return { GREEN: "green", RED: "red", OUT: "out", WON: "won" }[S.phase] || "lobby";
+    if (S.sense.state === "SCANNING") return "scanning";
+    return PHASE_SCENE[S.phase] || "lobby";
   }
 
-  function render() {
-    const scene = sceneName();
-    if (scene !== S.scene) {
-      root.dataset.scene = scene;
-      const [t, sub] = SCENES[scene];
-      $("signText").textContent = t;
-      $("signSub").textContent = sub;
-      const sign = $("sign");
-      sign.classList.remove("swing"); void sign.offsetWidth; sign.classList.add("swing");
-      if (scene === "lobby" || scene === "offline") $("quote").textContent = IDLE[Math.floor(Math.random() * IDLE.length)];
-      S.scene = scene;
+  // ------------------------------------------------------------- per-frame drawing
+  const bobbers = [154, 186, 218].map((x) => ({ x, shown: 0, target: 0 }));
+  seed = 3;
+  const flies = Array.from({ length: 18 }, () => ({ x: rnd(), y: rnd() }));
+  const clouds = [{ x: 0.12, y: 16, w: 22 }, { x: 0.58, y: 30, w: 16 }];
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // The gator, drawn from simple shapes so every edge is a hard pixel edge:
+  // a long snout with scales, two eye bumps on top, nostrils and one tooth.
+  function drawGator(c, t, scene, look) {
+    const gx = X(94), gy = waterY + 6;           // top-left of the snout, out in open water
+    const th = THEMES[SCENES[scene].theme];
+    const chomp = scene === "out";
+    const y = gy - (chomp ? 6 : 0);              // the head rises out of the water to chomp
+    const EYES = [gx + 9, gx + 21];
+    for (const bx of [-15, -10, -5]) {            // back ridges trailing behind
+      rect(c, "K", gx + bx, gy + 4, 5, 1); rect(c, "K", gx + bx + 1, gy + 3, 3, 1); rect(c, "f", gx + bx + 2, gy + 3, 1, 1);
+      rect(c, "K", gx + bx + 2, gy + 2, 1, 1);
     }
-    const st = S.online ? S.sense.state : "OFFLINE";
-    const [word, cls] = FEELS[st] || [st.toLowerCase(), ""];
-    const feels = $("feels");
-    feels.textContent = word;
-    feels.className = "big " + cls;
-
-    // wiggle-o-meter: motion as a multiple of the "still" threshold; the tick is the freeze line (1x)
-    const m = S.online ? (S.sense.motion || 0) : 0, MAX = 4;
-    $("meterFill").style.width = `${Math.min(m / MAX, 1) * 100}%`;
-    $("meterTick").style.left = `${100 / MAX}%`;
-    $("meter").classList.toggle("hot", m > 1);
-
-    const ratios = S.online ? (S.sense.ratios || (S.sense.receivers || []).map((r) => r === "MOVING" ? 3 : .4)) : [];
-    bobbers.forEach((b, i) => { b.target = ratios[i] ?? 0; b.body.style.opacity = S.online && i >= ratios.length ? .35 : 1; });
-
-    const status = $("status");
-    status.classList.toggle("live", S.online);
-    $("statusText").textContent = S.online ? "live from the booth" : "booth is napping";
+    if (chomp) {                                 // open mouth: top teeth, mouth, bottom teeth, lower jaw
+      rect(c, "R", gx + 6, y + 8, 40, gy + 6 - (y + 8));
+      for (let i = 8; i < 44; i += 3) { rect(c, "W", gx + i, y + 8, 2, 1); rect(c, "W", gx + i + 1, y + 9, 1, 1); }
+      for (let i = 9; i < 44; i += 3) { rect(c, "W", gx + i, gy + 5, 2, 1); rect(c, "W", gx + i, gy + 4, 1, 1); }
+      rect(c, "K", gx + 4, gy + 6, 42, 1); rect(c, "g", gx + 5, gy + 7, 40, 2); rect(c, "K", gx + 4, gy + 9, 42, 1);
+    }
+    // outlines first, then fills, so the eye bumps merge into the head
+    rect(c, "K", gx, y + 1, 48, 7); rect(c, "K", gx + 1, y, 46, 9);
+    for (const ex of EYES) ellipse(c, "K", ex, y, 6, 5);
+    rect(c, "g", gx + 1, y + 1, 46, 7);
+    for (const ex of EYES) ellipse(c, "g", ex, y, 5, 4);
+    rect(c, "l", gx + 28, y + 1, 16, 1);         // light along the snout
+    for (let i = 3; i < 44; i += 4) rect(c, "f", gx + i + (i % 8 ? 1 : 0), y + 3 + (i % 8 ? 1 : 0), 1, 1); // scales
+    rect(c, "f", gx + 1, y + 7, 46, 1);          // shaded jaw line
+    rect(c, "K", gx + 41, y + 2, 1, 1); rect(c, "K", gx + 44, y + 2, 1, 1); // nostrils
+    if (!chomp) { rect(c, "W", gx + 38, y + 8, 1, 2); rect(c, "K", gx + 37, y + 9, 1, 1); } // one cheeky tooth
+    // eyes: 4x3 whites; lids by scene; on red the pupils turn to the busiest bobber
+    const lids = { green: 3, offline: 3, paused: 3, lobby: 1, hide: 1, countdown: 1, scanning: 1, won: 2 }[scene] ?? 0;
+    for (const ex of EYES) {
+      rect(c, "l", ex - 3, y - 3, 2, 1);
+      rect(c, "W", ex - 2, y - 2, 4, 3);
+      rect(c, "K", ex + look, y - 2, 1, 3);
+      if (lids > 0) rect(c, "g", ex - 2, y - 2, 4, Math.min(lids, 3));
+      if (lids >= 3) rect(c, "K", ex - 2, y, 4, 1);
+    }
+    // water over the belly, so the gator sits IN the swamp
+    rect(c, th.water, gx - 18, gy + 10, 70, 4);
+    for (let i = 0; i < 70; i += 4) rect(c, th.waterHi, gx - 18 + i + (Math.floor(t / 300) % 2), gy + 10, 2, 1);
+    if (lids >= 3 && !reduce) {                  // zzz while asleep
+      for (let i = 0; i < 3; i++) {
+        const k = (t / 1800 + i / 3) % 1;
+        text(c, "Z", gx + 24 + Math.round(k * 8), gy - 12 - Math.round(k * 16), "W", { outline: "K" });
+      }
+    }
+    if (chomp && t - S.sceneAt < 1000) {         // splash for the first second of a catch
+      const k = (t - S.sceneAt) / 1000;
+      for (const dx of [-10, -4, 4, 10]) rect(c, "C", gx + 24 + Math.round(dx * k * 3), gy + 6 - Math.round(k * 16) + Math.round(k * k * 14), 1, 2);
+    }
   }
 
+  function drawScene(t) {
+    const scene = S.scene, sc = SCENES[scene], th = THEMES[sc.theme];
+    const key = sc.theme + W + "x" + H;
+    if (key !== bgKey) { drawBackground(th); bgKey = key; }
+    ctx.drawImage(bg, 0, 0);
+    const step = reduce ? 0 : Math.floor(t / 125); // animations tick at 8 fps, like the old consoles
+
+    for (const cl of clouds) {                     // clouds drift 1 pixel at a time
+      const x = Math.floor(((cl.x * W + step / 6) % (W + 40)) - 20);
+      ellipse(ctx, th.cloud, x, cl.y, cl.w / 2, 3);
+      ellipse(ctx, th.cloud, x - Math.floor(cl.w / 4), cl.y + 1, Math.floor(cl.w / 3), 2);
+      rect(ctx, th.cloudLo, x - cl.w / 2 + 2, cl.y + 3, cl.w - 3, 1);
+    }
+    seed = 99;                                     // water shimmer
+    for (let i = 0; i < W / 10; i++) {
+      const sx = Math.floor(rnd() * W), sy = waterY + 3 + Math.floor(rnd() * (H - waterY - 6)), len = 2 + Math.floor(rnd() * 5);
+      rect(ctx, th.waterHi, (sx + (Math.floor(step / 4) % 3)) % W, sy, len, 1);
+    }
+    sprite(ctx, FLAMES[step % 3], X(60) - 3, waterY - 12); // campfire
+
+    const lx = X(249), ly = waterY - 31;           // lantern = transmitter: glow, rings, reflection
+    if (th.glow) for (let r = 6; r <= 10; r += 2) ring(ctx, "Y", lx + 3, ly + 4, r, 3);
+    if (!reduce) for (let i = 0; i < 3; i++) {
+      const r = 4 + ((step + i * 8) % 24);
+      ring(ctx, r > 16 ? "L" : "Y", lx + 3, ly + 4, r, r > 12 ? 3 : 1);
+    }
+    sprite(ctx, LANTERN, lx, ly);
+    for (let k = 0; k < 4; k++) if ((step + k) % 2) rect(ctx, "Y", lx + 3, waterY + 2 + k * 3, 1, 2);
+
+    let loudest = 0, loudestX = 154;              // bobbers = receivers
+    bobbers.forEach((b, i) => {
+      b.shown += (b.target - b.shown) * 0.2;
+      const v = Math.min(b.shown, 5);
+      const bob = reduce ? 0 : Math.round(Math.sin(t / (380 - v * 40) + i * 2) * (0.6 + v * 0.7));
+      const dip = Math.round(v * 0.8);
+      const bx = X(b.x), by = waterY + 4;
+      const rx = 5 + Math.round(v * 2);
+      for (let k = -rx; k <= rx; k += v > 1 ? 1 : 2) rect(ctx, th.waterHi, bx + k, by + 6 + (Math.abs(k) > rx - 2 ? -1 : 0), 1, 1);
+      sprite(ctx, BOBBER, bx - 4, by - 4 + bob + dip);
+      if (b.shown > loudest) { loudest = b.shown; loudestX = b.x; }
+    });
+
+    const watching = scene === "red" || scene === "out";
+    const look = watching && loudest > 0.8 && loudestX > 154 ? 1 : 0; // eyes slide toward the far bobbers
+    drawGator(ctx, t, scene, look);
+
+    for (const [dx, h] of [[4, 34], [10, 42], [16, 30], [306, 38], [313, 46], [118, 22]]) { // cattails
+      const x = X(dx), base = H;
+      const sway = reduce ? 0 : ((step + dx) % 16 < 8 ? 0 : 1);
+      rect(ctx, "K", x - 1, base - h, 3, h); rect(ctx, "m", x, base - h + 1, 1, h - 1);
+      rect(ctx, "K", x - 2 + sway, base - h - 7, 5, 9); rect(ctx, "d", x - 1 + sway, base - h - 6, 3, 7); rect(ctx, "w", x - 1 + sway, base - h - 6, 1, 6);
+      rect(ctx, "m", x + sway, base - h - 9, 1, 2);
+    }
+    for (let i = 0; i < th.flies; i++) {           // fireflies
+      const f = flies[i];
+      if (reduce || ((step + i * 3) % 10) < 6) rect(ctx, "Y", f.x * W, waterY * 0.35 + f.y * waterY * 0.6, 1, 1);
+    }
+    if (th.mist) {                                 // morning mist while scanning: flat wisps drifting over the water
+      seed = 42;
+      for (let i = 0; i < W / 12; i++) {
+        const wy = waterY - 14 + Math.floor(rnd() * 20), len = 10 + Math.floor(rnd() * 22);
+        const wx = Math.floor(rnd() * (W + 40) + step / 3) % (W + 40) - 20;
+        for (let k = 0; k < len; k++) if ((k + wy) % 2 === 0 || (k > 3 && k < len - 3)) rect(ctx, "W", wx + k, wy, 1, 1);
+      }
+    }
+  }
+
+  // ------------------------------------------------------------- the UI (same pixels as the scene)
+  function drawSign(t) {
+    const sc = SCENES[S.scene];
+    const narrow = W < 260;
+    const sw = narrow ? W - 20 : Math.max(96, Math.min(150, W - 2 * 98));
+    const sh = 21;
+    const sx = Math.floor((W - sw) / 2);
+    const drop = [-8, -4, -1, 1, 0][Math.min(4, Math.floor((t - S.sceneAt) / 70))]; // drops in and bounces on a change
+    const sy = (narrow ? 16 : 7) + drop;
+    for (const rx of [sx + 9, sx + sw - 10]) for (let y = 0; y < sy; y++) rect(ctx, y % 2 ? "Y" : "d", rx, y, 1, 1); // twisted rope
+    rect(ctx, "K", sx, sy, sw, sh);
+    rect(ctx, "w", sx + 1, sy + 1, sw - 2, sh - 2);
+    for (let i = 4; i < sw - 8; i += 9) rect(ctx, "d", sx + i, sy + 2 + (i % 3 === 0 ? 0 : 1), 5, 1);   // grain
+    for (let i = 3; i < sw - 8; i += 13) rect(ctx, "d", sx + i, sy + sh - 3, 6, 1);
+    for (const nx of [sx + 8, sx + sw - 11]) { rect(ctx, "K", nx, sy + 2, 3, 3); rect(ctx, "L", nx + 1, sy + 3, 1, 1); }
+    const px = sx + 4, py = sy + 6, pw = sw - 8, ph = 12;   // painted panel with the title
+    rect(ctx, "K", px, py, pw, ph); rect(ctx, sc.panel, px + 1, py + 1, pw - 2, ph - 2);
+    const bold = textWidth(sc.title, true) <= pw - 6;
+    const tw = textWidth(sc.title, bold);
+    text(ctx, sc.title, px + Math.floor((pw - tw) / 2), py + 2, sc.ink || "W", { bold, shadow: sc.ink ? null : "K" });
+  }
+
+  function drawNotes(t) {
+    const narrow = W < 260;
+    const w = narrow ? W - 8 : 92, h = narrow ? 36 : 70;
+    const x = narrow ? 4 : W - w - 4, y = narrow ? 42 : 4;
+    windowBox(ctx, x, y, w, h);
+    const state = S.online ? S.sense.state : "OFFLINE";
+    const [word, col] = FEELS[state] || [state, "W"];
+    const live = S.online && (reduce || Math.floor(t / 500) % 2);
+    rect(ctx, live ? "l" : "G", x + w - 9, y + 6, 3, 3);
+    text(ctx, "FIELD NOTES", x + 6, y + 6, "Y");
+    if (narrow) {
+      text(ctx, word, x + 6, y + 16, col, { bold: textWidth(word, true) < w / 2 - 6 });
+      meter(x + Math.floor(w / 2) + 2, y + 16, Math.floor(w / 2) - 10);
+      text(ctx, "ROUND " + clockText(), x + 6, y + 26, "L");
+      return;
+    }
+    text(ctx, "WI-FI FEELS", x + 6, y + 17, "L");
+    text(ctx, word, x + 6, y + 26, col, { bold: textWidth(word, true) <= w - 12 });
+    text(ctx, "WIGGLES", x + 6, y + 37, "L");
+    meter(x + 6, y + 46, w - 12);
+    text(ctx, "ROUND", x + 6, y + 57, "L");
+    const ct = clockText();
+    text(ctx, ct, x + w - 6 - textWidth(ct, true), y + 57, "W", { bold: true });
+  }
+  // the wiggle meter: segments up to 4x the freeze line; the white tick IS the freeze line
+  function meter(x, y, w) {
+    const m = S.online ? (S.sense.motion || 0) : 0, MAX = 4;
+    rect(ctx, "K", x, y, w, 7); rect(ctx, "D", x + 1, y + 1, w - 2, 5);
+    const segs = Math.floor((w - 2) / 3), lit = Math.round(Math.min(m / MAX, 1) * segs), freeze = Math.round(segs / MAX);
+    for (let i = 0; i < lit; i++) rect(ctx, i < freeze ? "l" : i < freeze * 2 ? "O" : "R", x + 2 + i * 3, y + 2, 2, 3);
+    rect(ctx, "W", x + 1 + freeze * 3, y - 1, 1, 9);
+  }
   function clockText() {
-    if (!S.roundStart || !["green", "red", "out", "won"].includes(S.scene)) return "–";
+    if (!S.roundStart || !["green", "red", "out", "won", "paused"].includes(S.scene)) return "-:--";
     const s = Math.floor((Date.now() - S.roundStart) / 1000);
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   }
 
-  let bubbleTimer = null;
-  function showBubble(line) {
-    $("quote").textContent = `“${line}”`;
-    const b = $("bubble");
-    const g = $("gator").getBoundingClientRect();
-    b.textContent = line;
-    b.style.left = `${Math.max(12, g.left + g.width * .45)}px`;
-    b.style.top = `${Math.max(12, g.top - 110)}px`;
-    b.classList.add("show");
-    clearTimeout(bubbleTimer);
-    bubbleTimer = setTimeout(() => b.classList.remove("show"), 6500);
+  function drawLegend() {
+    if (W < 300) return;
+    const x = 4, y = 17, w = 84, h = 36;
+    windowBox(ctx, x, y, w, h, "D");
+    sprite(ctx, BOBBER_ICON, x + 5, y + 6);
+    text(ctx, "RECEIVER", x + 15, y + 6, "W");
+    sprite(ctx, LANTERN, x + 5, y + 15);
+    text(ctx, "TRANSMITTER", x + 15, y + 16, "W");
+    text(ctx, "NO CAMERAS!", x + 15, y + 26, "Y");
   }
 
-  // ---------------------------------------------------------------- animation loop
-  const pupils = [...document.querySelectorAll(".pupil")];
-  function frame(now) {
-    const t = now / 1000;
-    let loudest = 0, loudestX = 830;
-    bobbers.forEach((b, i) => {
-      b.shown += (b.target - b.shown) * .12;          // ease toward the Wi-Fi's value
-      const v = Math.min(b.shown, 5);
-      const bob = Math.sin(t * (1.6 + v * .5) + i * 1.7) * (1.5 + v * 2.2);
-      const dip = v * 4;                                 // more movement, deeper dip
-      b.body.setAttribute("transform", `translate(0 ${(bob + dip).toFixed(2)}) rotate(${(Math.sin(t * 1.3 + i) * (2 + v * 3)).toFixed(2)} ${b.x} ${BOB_Y})`);
-      const s = 1 + v * .22 + Math.sin(t * 2 + i) * .05;
-      b.ripple1.setAttribute("rx", (30 * s).toFixed(1));
-      b.ripple2.setAttribute("rx", (48 * s * (1 + v * .08)).toFixed(1));
-      b.ripple2.setAttribute("opacity", Math.min(.3 + v * .25, 1).toFixed(2));
-      if (b.shown > loudest) { loudest = b.shown; loudestX = b.x; }
+  function drawDialog(t) {
+    const x = 4, h = 32, y = H - h - 3, w = W - 8;
+    windowBox(ctx, x, y, w, h);
+    rect(ctx, "K", x + 5, y + 5, 22, 22); rect(ctx, "T", x + 6, y + 6, 20, 20);
+    sprite(ctx, PORTRAIT, x + 7, y + 8);
+    text(ctx, "GATOR", x + 31, y + 5, "Y");
+    const lines = wrap(S.say, w - 40).slice(-2);
+    let shown = Math.floor((t - S.sayAt) / (reduce ? 1 : 28)); // types out, ~35 letters a second
+    lines.forEach((ln, i) => {
+      text(ctx, ln.slice(0, Math.max(0, shown)), x + 31, y + 14 + i * 9, "W");
+      shown -= ln.length;
     });
-    // on red light the gator looks at whichever bobber is moving most
-    const watching = S.scene === "red" || S.scene === "out";
-    const look = watching ? Math.max(-4, Math.min(4, (loudestX - 360) / 120)) : Math.sin(t * .4) * 1.5;
-    pupils.forEach((p) => p.setAttribute("transform", `translate(${look.toFixed(2)} 0)`));
-    $("clock").textContent = clockText();
+    if (shown > 0 && Math.floor(t / 400) % 2) { // finished: the little blinking arrow
+      rect(ctx, "Y", x + w - 10, y + h - 9, 5, 1); rect(ctx, "Y", x + w - 9, y + h - 8, 3, 1); rect(ctx, "Y", x + w - 8, y + h - 7, 1, 1);
+    }
+  }
+
+  // ------------------------------------------------------------- main loop
+  let lastSpoken = "";
+  function frame(now) {
+    const scene = sceneName();
+    if (scene !== S.scene) {
+      S.scene = scene; S.sceneAt = now;
+      // a fresh AI line beats the stock line on a catch or a win
+      const freshAi = S.say && S.say === S.ai && now - S.sayAt < 8000;
+      if (!((scene === "out" || scene === "won") && freshAi)) { S.say = SCENES[scene].say; S.sayAt = now; }
+    }
+    const ratios = S.online ? (S.sense.ratios || (S.sense.receivers || []).map((r) => (r === "MOVING" ? 3 : 0.4))) : [];
+    bobbers.forEach((b, i) => { b.target = ratios[i] ?? 0; });
+
+    drawScene(now);
+    drawLegend();
+    drawSign(now);
+    drawNotes(now);
+    drawDialog(now);
+    text(ctx, "WIFIND", 5, 5, "Y", { outline: "K", shadow: "R" });
+
+    const spoken = `${SCENES[scene].title}. ${S.say}`; // the same news for screen readers
+    if (spoken !== lastSpoken) { document.getElementById("live").textContent = spoken; lastSpoken = spoken; }
     requestAnimationFrame(frame);
   }
 
-  render();
+  S.say = SCENES.offline.say;
   requestAnimationFrame(frame);
   pollSense(); pollPhase(); pollAi();
   setInterval(pollSense, 250);
