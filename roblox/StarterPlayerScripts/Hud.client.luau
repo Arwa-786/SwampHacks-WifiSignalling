@@ -241,6 +241,7 @@ local STATE_LOOK = {
 }
 local BANNER = {
 	LOBBY = { "STEP OUT", PANEL, Color3.new(1, 1, 1) },
+	OFFLINE_LOBBY = { "LOBBY", PANEL, Color3.new(1, 1, 1) }, -- no Wi-Fi: nobody is hiding, so nobody steps out
 	SCAN = { "SCANNING", CYAN, INK },
 	HIDE = { "HIDE!", Color3.fromRGB(255, 214, 10), INK },
 	PAUSED = { "PAUSED", Color3.fromRGB(90, 96, 130), Color3.new(1, 1, 1) },
@@ -253,7 +254,11 @@ local BANNER = {
 local function onPhase()
 	updateCard()
 	updateHost()
-	local look = BANNER[Paused.Value and "PAUSED" or Phase.Value] or BANNER.LOBBY
+	local key = Paused.Value and "PAUSED" or Phase.Value
+	if key == "LOBBY" and WState.Value == "OFFLINE" then
+		key = "OFFLINE_LOBBY"
+	end
+	local look = BANNER[key] or BANNER.LOBBY
 	bannerText.Text, banner.BackgroundColor3, bannerText.TextColor3 = look[1], look[2], look[3]
 	banner.Size = UDim2.fromOffset(420, 78) -- pop, then settle
 	TweenService:Create(banner, TweenInfo.new(0.3, Enum.EasingStyle.Back), { Size = UDim2.fromOffset(380, 70) }):Play()
@@ -304,6 +309,7 @@ TimeLeft.Changed:Connect(function()
 	timerText.Text = tostring(TimeLeft.Value)
 end)
 WState.Changed:Connect(onWifi)
+WState.Changed:Connect(onPhase) -- the lobby banner depends on whether the Wi-Fi is online
 WMotion.Changed:Connect(onWifi)
 WReceivers.Changed:Connect(onWifi)
 onPhase()
