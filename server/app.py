@@ -29,7 +29,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
 import sys
 import threading
 import time
@@ -47,6 +46,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "sensing", "host"))
 
 from game import Game  # noqa: E402
 from gator import Gator, Voice, booth_today, rescue_template  # noqa: E402
+from speaker import Speaker  # noqa: E402
 from store import Store  # noqa: E402
 from multi_rx import WATERFALL_ROWS, MultiReceiver  # noqa: E402
 
@@ -150,6 +150,7 @@ SPOKEN = {
     "WON": "You made it! The gator never saw you.",
     "PAUSED": "Paused. Stay right where you are.",
 }
+URGENT_PHASES = {"COUNTDOWN", "GREEN", "RED", "OUT", "WON"}  # the hider must hear these on time
 SCAN_LINES = ["Shh. Listening to the empty swamp.",
               "Something splashed during my scan, so I'm keeping the old one.",
               "All quiet. Got it."]
@@ -247,9 +248,12 @@ def create_app(multi, store: Store | None = None, speak: bool = False, auto_scan
         snap["calibrated"] = multi.calibrated
         return snap
 
-    def say(text: str) -> None:
-        if speak:
-            subprocess.Popen(voice.command(text) if voice else ["say", "-r", "220", text])
+    # one voice at a time; light calls cut in (see speaker.py)
+    speaker = Speaker(voice.command if voice else (lambda text: ["say", "-r", "220", text])) if speak else None
+
+    def say(text: str, urgent: bool = False) -> None:
+        if speaker:
+            speaker.say(text, urgent)
 
     def gator_after_round(phase: str) -> None:
         """Off the game's path: build the facts, ask the gator (it has its own
@@ -380,7 +384,7 @@ def create_app(multi, store: Store | None = None, speak: bool = False, auto_scan
         if phase == "OUT":  # the moment the replay looks back from
             store.add_event("caught", {"sensed": multi.state()})
         if phase in SPOKEN:
-            say(SPOKEN[phase])
+            say(SPOKEN[phase], urgent=phase in URGENT_PHASES)
         if gator and phase in ("OUT", "WON"):
             threading.Thread(target=gator_after_round, args=(phase,), daemon=True).start()
         if auto_scan and phase == "SCAN":  # Roblox already gave the hider time to step out
