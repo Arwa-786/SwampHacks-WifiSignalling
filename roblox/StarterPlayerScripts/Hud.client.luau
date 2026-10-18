@@ -1,9 +1,10 @@
 -- Hud (LocalScript in StarterPlayerScripts): builds the on-screen UI in code.
 --   top:          GREEN LIGHT / RED LIGHT banner, message line, round timer
 --   bottom-left:  "Wi-Fi vision" card: what the sensors see of the real player
---   centre:       between rounds, a card explaining the game + what's happening
---                 (step out / scanning / hide); after a round, the results card
---   right:        host buttons under the timer (START NOW, PAUSE, END ROUND, RESCAN), hosts only
+--   top-left:     between rounds, a small card explaining the game + what's happening
+--                 (step out / scanning / hide); after a round, the results card.
+--                 Kept small and off-centre so the swamp and avatar stay visible.
+--   bottom-right: host buttons in one row (START NOW, PAUSE, END ROUND, RESCAN), hosts only
 
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
@@ -117,23 +118,25 @@ new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = U
 -- One card in the middle of the screen. Between rounds it explains the game
 -- (people joining mid-way need to know a real person is hiding); after a round
 -- it shows the results.
-local cardC = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
-	Size = UDim2.fromOffset(540, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundColor3 = PANEL,
+local cardC = new("Frame", { AnchorPoint = Vector2.new(0, 0), Position = UDim2.fromOffset(24, 96),
+	Size = UDim2.fromOffset(340, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundColor3 = PANEL,
 	BackgroundTransparency = 0.04, Visible = false }, gui)
-round(cardC, 24)
-new("UIStroke", { Thickness = 3, Color = Color3.new(1, 1, 1), Transparency = 0.75 }, cardC)
-new("UIPadding", { PaddingLeft = UDim.new(0, 28), PaddingRight = UDim.new(0, 28), PaddingTop = UDim.new(0, 22),
-	PaddingBottom = UDim.new(0, 22) }, cardC)
-new("UIListLayout", { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }, cardC)
-local cTitle = text({ Size = UDim2.new(1, 0, 0, 46), Font = Enum.Font.GothamBlack, TextScaled = true, LayoutOrder = 1 }, cardC)
-local cSub = text({ Size = UDim2.new(1, 0, 0, 44), TextSize = 19, TextWrapped = true, TextColor3 = MUTED,
-	LayoutOrder = 2 }, cardC)
+round(cardC, 16)
+new("UIStroke", { Thickness = 2, Color = Color3.new(1, 1, 1), Transparency = 0.8 }, cardC)
+new("UIPadding", { PaddingLeft = UDim.new(0, 16), PaddingRight = UDim.new(0, 16), PaddingTop = UDim.new(0, 14),
+	PaddingBottom = UDim.new(0, 14) }, cardC)
+new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, cardC)
+local cTitle = text({ Size = UDim2.new(1, 0, 0, 26), Font = Enum.Font.GothamBlack, TextScaled = true,
+	TextXAlignment = Enum.TextXAlignment.Left, LayoutOrder = 1 }, cardC)
+local cSub = text({ Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, TextSize = 14, TextWrapped = true,
+	TextColor3 = MUTED, TextXAlignment = Enum.TextXAlignment.Left, LayoutOrder = 2 }, cardC)
 local cRows = new("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
 	BackgroundTransparency = 1, LayoutOrder = 3 }, cardC)
 new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, cRows)
-local cGator = text({ Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, TextSize = 20,
+local cGator = text({ Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, TextSize = 15,
 	TextWrapped = true, TextColor3 = Color3.fromRGB(150, 230, 120), Font = Enum.Font.GothamMedium, LayoutOrder = 4 }, cardC)
-local cStatus = text({ Size = UDim2.new(1, 0, 0, 34), Font = Enum.Font.GothamBlack, TextScaled = true,
+local cStatus = text({ Size = UDim2.new(1, 0, 0, 22), Font = Enum.Font.GothamBlack, TextScaled = true,
+	TextXAlignment = Enum.TextXAlignment.Left,
 	TextColor3 = CYAN, LayoutOrder = 5 }, cardC)
 
 local function setRows(rows)
@@ -143,12 +146,12 @@ local function setRows(rows)
 		end
 	end
 	for i, row in rows do
-		local line = new("Frame", { Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = Color3.fromRGB(36, 40, 58),
+		local line = new("Frame", { Size = UDim2.new(1, 0, 0, 24), BackgroundColor3 = Color3.fromRGB(36, 40, 58),
 			LayoutOrder = i }, cRows)
 		round(line, 10)
-		text({ Position = UDim2.fromOffset(14, 0), Size = UDim2.new(0.5, -14, 1, 0), Text = row[1], TextSize = 17,
+		text({ Position = UDim2.fromOffset(10, 0), Size = UDim2.new(0.5, -10, 1, 0), Text = row[1], TextSize = 13,
 			TextColor3 = MUTED, TextXAlignment = Enum.TextXAlignment.Left }, line)
-		text({ Position = UDim2.new(0.5, 0, 0, 0), Size = UDim2.new(0.5, -14, 1, 0), Text = row[2], TextSize = 18,
+		text({ Position = UDim2.new(0.5, 0, 0, 0), Size = UDim2.new(0.5, -10, 1, 0), Text = row[2], TextSize = 14,
 			Font = Enum.Font.GothamBlack, TextXAlignment = Enum.TextXAlignment.Right, TextTruncate = Enum.TextTruncate.AtEnd }, line)
 	end
 end
@@ -176,7 +179,7 @@ local function updateCard()
 		cStatus.Text = "Next round soon"
 	elseif BETWEEN[phase] then
 		cardC.Visible = true
-		cTitle.Text, cTitle.TextColor3 = "WIFIND: RED LIGHT, GREEN LIGHT", Color3.new(1, 1, 1)
+		cTitle.Text, cTitle.TextColor3 = "GATORWAVE: RED LIGHT, GREEN LIGHT", Color3.new(1, 1, 1)
 		cSub.Text = "Can Wi-Fi signals tell if someone hiding behind a curtain moves? Try to catch them."
 		setRows(INTRO_ROWS)
 		cGator.Text = ""
@@ -189,17 +192,16 @@ end
 
 ---------------------------------------------------------------- host buttons
 
-local hostPanel = new("Frame", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -24, 0, 140),
-	Size = UDim2.fromOffset(150, 0),
-	AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Visible = false }, gui)
-new("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, hostPanel)
-text({ Size = UDim2.new(1, 0, 0, 16), Text = "HOST", TextSize = 13, TextColor3 = MUTED, LayoutOrder = 0,
-	TextXAlignment = Enum.TextXAlignment.Left }, hostPanel)
+local hostPanel = new("Frame", { AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -24, 1, -24),
+	Size = UDim2.fromOffset(0, 34),
+	AutomaticSize = Enum.AutomaticSize.X, BackgroundTransparency = 1, Visible = false }, gui)
+new("UIListLayout", { Padding = UDim.new(0, 6), FillDirection = Enum.FillDirection.Horizontal,
+	SortOrder = Enum.SortOrder.LayoutOrder }, hostPanel)
 local hostButtons = {}
 local function hostButton(cmd, label, color, order)
-	local b = new("TextButton", { Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = color, Font = Enum.Font.GothamBlack,
-		TextSize = 16, TextColor3 = Color3.new(1, 1, 1), Text = label, LayoutOrder = order, AutoButtonColor = true }, hostPanel)
-	round(b, 12)
+	local b = new("TextButton", { Size = UDim2.fromOffset(104, 34), BackgroundColor3 = color, Font = Enum.Font.GothamBlack,
+		TextSize = 12, TextColor3 = Color3.new(1, 1, 1), Text = label, LayoutOrder = order, AutoButtonColor = true }, hostPanel)
+	round(b, 10)
 	b.Activated:Connect(function()
 		Host:FireServer(cmd)
 	end)
