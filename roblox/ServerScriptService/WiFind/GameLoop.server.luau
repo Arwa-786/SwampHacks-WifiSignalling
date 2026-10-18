@@ -458,7 +458,10 @@ local function runRound()
 	setPhase("RESULTS")
 	Course.setLight(course, true)
 	request.finish = false
-	task.wait(Config.RESULTS_S)
+	for left = Config.RESULTS_S, 1, -1 do -- the timer counts down to the next round
+		Shared.TimeLeft.Value = left
+		task.wait(1)
+	end
 
 	if runner and runner.player then
 		runner.player:SetAttribute("WiFiControlled", false) -- keyboard back on
