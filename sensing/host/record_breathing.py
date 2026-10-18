@@ -6,7 +6,7 @@ No breathing sensor needed: the laptop says "in" / "out" at a fixed pace and
 you breathe along, so each segment's true rate is exactly the pace. Script:
     45 s  empty room (step away)      label "empty"   -> what "no breathing" looks like
     10 s  get in place, sit still     label "settle"  (not scored)
-    then for each --rates (default 10, 15, 20 breaths/min):
+    then for each --rates (default 14, 18, 24 breaths/min):
     50 s  breathe with the voice      label "breath_<rate>"
     10 s  rest, breathe normally      label "rest"    (not scored)
     then 30 s empty room again        label "empty_end" (more "no breathing" for the model)
@@ -56,7 +56,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("output")
     parser.add_argument("--ports", nargs="*")
-    parser.add_argument("--rates", nargs="*", type=int, default=[10, 15, 20], help="breaths per minute to pace")
+    parser.add_argument("--rates", nargs="*", type=int, default=[14, 18, 24],
+                        help="breaths per minute to pace (12-36: what the Wi-Fi rate can measure)")
     parser.add_argument("--person", default="unknown")
     parser.add_argument("--position", default="unknown")
     parser.add_argument("--natural", type=float, default=0.0, metavar="MINUTES",

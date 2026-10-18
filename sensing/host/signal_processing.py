@@ -208,7 +208,11 @@ class LiveDetector:
 
 # ---------------------------------------------------------------- breathing
 
-BREATHING_BAND = (0.1, 0.6)  # Hz = 6-36 breaths per minute
+# Hz = 12-36 breaths per minute. It used to start at 0.1 Hz (6/min), and slow body sway
+# won: on a natural-breathing session (phone on the belly said ~22/min) every board read
+# ~9/min, 9-12 off; from 0.2 Hz the best boards were ~2 off. The cost: breathing slower
+# than 12/min isn't measured (normal adult resting breathing is about 12-20/min).
+BREATHING_BAND = (0.2, 0.6)
 HEART_BAND = (0.8, 2.0)  # Hz = 48-120 bpm. Experimental: ESP32 is usually too noisy.
 
 

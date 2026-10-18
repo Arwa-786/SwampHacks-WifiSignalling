@@ -267,6 +267,9 @@ Also: Guardian "room memory" day strip (state_agg), and forks to re-score old ga
   First real session (sitting behind curtain): model 100% found / 0% empty-false (same-session split),
   old rule 9% / 7%; but "presence" alone gives the same, so it proves "still person", not breathing yet
   (next: breath-hold segments). FFT rate stuck near 9/min.
+  Natural session with a phone on the belly (phyphox, phone_truth.py, ~22/min): with 6-36/min every
+  board read ~9 (12.6 off); BREATHING_BAND moved to 12-36/min -> 2.3 off, 41% within ±2.
+  Breathing detector tested across the 2 sessions: 100% found, 0-2% empty false; old rule 19-20%.
 - Everything goes to Tiger: recorders upload when they finish (tiger_upload.py: recordings,
   training_windows kind motion/breathing, breathing rates with true pace, readings); train_breathing.py
   and evaluate.py save every reported number to model_runs; backfill_tiger.py for older/failed uploads.

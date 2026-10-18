@@ -147,7 +147,7 @@ def test_debouncer_needed_one_switches_immediately():
 # ---------------------------------------------------------------- breathing
 
 
-@pytest.mark.parametrize("bpm", [10, 15, 24])
+@pytest.mark.parametrize("bpm", [14, 18, 24])
 def test_breathing_rate_found(bpm):
     t, amps = fake(30, profile=PERSON, breath_hz=bpm / 60, breath_depth=0.03)
     # Real packets arrive with jitter; drop 10% at random to exercise resampling.
