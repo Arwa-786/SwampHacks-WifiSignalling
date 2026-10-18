@@ -80,6 +80,42 @@
     return { text: words[b.status] || "?", col: "L", rate: null };
   }
 
+  // Three uses of the same sensing: fire rescue, smart lights, hot car. #lights / #car in the URL.
+  const MODES = ["rescue", "lights", "car"];
+  let mode = MODES.includes(location.hash.slice(1)) ? location.hash.slice(1) : "rescue";
+  addEventListener("hashchange", () => { if (MODES.includes(location.hash.slice(1))) mode = location.hash.slice(1); });
+  let lastSeen = 0;            // when anyone was last seen (smart lights stay on a while after)
+  const LIGHTS_GRACE_S = 20;
+
+  // what each mode says about the same reading: label plate, alert box, gator's line
+  function view(st, t) {
+    const present = st.key === "still" || st.key === "moving";
+    if (present) lastSeen = t;
+    const breathing_ = breathing().text === "YES";
+    if (mode === "lights") {
+      const left = Math.max(0, Math.ceil(LIGHTS_GRACE_S - (t - lastSeen) / 1000));
+      const on = present || (lastSeen > 0 && left > 0);
+      const say = !S.online ? "NO SIGNAL. LIGHTS STAY AS THEY ARE."
+        : st.key === "moving" ? "SOMEONE IS MOVING AROUND. LIGHTS ON."
+        : st.key === "still" ? "SOMEONE IS SITTING STILL" + (breathing_ ? " AND BREATHING" : "") +
+          ". A MOTION SENSOR WOULD SWITCH THE LIGHTS OFF NOW. WIFIND KEEPS THEM ON."
+        : on ? `NOBODY SEEN. LIGHTS OFF IN ${left} S.` : "ROOM EMPTY. LIGHTS OFF, SAVING ENERGY.";
+      return { plate: "WIFIND SMART LIGHTS", place: "LIVING ROOM", box: "LIGHTS", value: on ? "ON" : "OFF",
+        panel: on ? "Y" : "D", ink: on ? "K" : "W", flash: false, light: on, crew: "GATOR, HOME HELPER", say };
+    }
+    if (mode === "car") {
+      const say = !S.online ? "NO SIGNAL FROM THE CAR SENSOR."
+        : st.key === "moving" ? "CAR PARKED, BUT SOMETHING IS MOVING INSIDE. CHECK THE CAR NOW!"
+        : st.key === "still" ? (breathing_ ? "CAR PARKED. NOTHING MOVING, BUT BREATHING-LIKE MOTION IN THE BACK SEAT. CHECK THE CAR NOW!"
+          : "CAR PARKED. SOMEONE MAY BE INSIDE, NOT MOVING. CHECK THE CAR.")
+        : "CAR EMPTY. NOTHING BREATHING INSIDE.";
+      return { plate: "WIFIND CAR CHECK", place: "BACK SEAT", box: "INSIDE", value: !S.online ? "?" : present ? "YES!" : "NO",
+        panel: present ? "R" : "G", ink: "W", flash: present, crew: "GATOR, CAR CHECK", say };
+    }
+    return { plate: "WIFIND RESCUE SCANNER", place: "ROOM 1", box: "PRIORITY", value: st.priority, panel: st.panel, ink: "W",
+      flash: st.priority === "1", crew: "GATOR, RESCUE CREW", say: st.say, helmet: true };
+  }
+
   // the room's status, in one place: what the sign, the echo and the notes show
   function status() {
     if (!S.online) return { key: "offline", sign: "NO SIGNAL", panel: "N", person: "?", moving: "?", priority: "-",
@@ -102,7 +138,7 @@
 
   // ------------------------------------------------------------- the night swamp + burning cabin
   // ------------------------------------------------------------- the night: a burning cabin on the horizon
-  function drawWorld(t) {
+  function drawWorld(t, v) {
     const step = reduce ? 0 : Math.floor(t / 125);
     const horizon = H - 62;
     for (let y = 0; y < horizon; y++) for (let x = 0; x < W; x++) {   // night sky, fire glow low down
@@ -115,8 +151,26 @@
       rect(ctx, (i % 7) ? "W" : "Y", hx % W, 4 + ((hx >>> 12) % Math.floor(horizon * 0.5)), 1, 1);
     }
     for (let x = 0; x < W; x += 12) { ellipse(ctx, "K", x + 6, horizon - 10 - ((x * 7) % 7), 7, 7); rect(ctx, "K", x, horizon - 10, 14, 10); }
-    // the cabin, burning, far off on the left
     const cx = 18, cy = horizon - 22;
+    if (mode === "lights") {                                           // a cabin at night, window lit or dark
+      rect(ctx, "K", cx, cy, 34, 22);
+      for (let r = 0; r < 9; r++) rect(ctx, "K", cx - 4 + r * 2, cy - 1 - r, 42 - r * 4, 1);
+      rect(ctx, v.light ? "Y" : "D", cx + 6, cy + 6, 8, 7); rect(ctx, v.light ? "Y" : "D", cx + 20, cy + 6, 8, 7);
+      if (v.light) for (let k = 0; k < 6; k++) rect(ctx, "Y", cx + 4 + k * 5, horizon + 3 + (k % 3), 2, 1);
+      rect(ctx, "N", 0, horizon, W, H - horizon); rect(ctx, "T", 0, horizon, W, 1);
+      return;
+    }
+    if (mode === "car") {                                              // a parked car under a hot sun
+      ellipse(ctx, "Y", 40, 30, 9, 9); for (let k = 0; k < 8; k++) rect(ctx, "Y", 40 + Math.round(Math.cos(k * 0.8) * 13), 30 + Math.round(Math.sin(k * 0.8) * 13), 2, 2);
+      rect(ctx, "D", 0, horizon, W, H - horizon); rect(ctx, "G", 0, horizon, W, 1);   // a car park
+      for (let x = 6; x < 90; x += 22) rect(ctx, "L", x, horizon + 14, 12, 1);
+      rect(ctx, "K", cx - 4, cy + 6, 46, 12); rect(ctx, "K", cx + 6, cy - 2, 24, 9);   // car silhouette
+      rect(ctx, "C", cx + 9, cy, 8, 6); rect(ctx, "C", cx + 19, cy, 8, 6);
+      ellipse(ctx, "K", cx + 6, cy + 18, 4, 4); ellipse(ctx, "K", cx + 32, cy + 18, 4, 4);
+      if (!reduce) for (let k = 0; k < 5; k++) rect(ctx, "O", cx + 2 + k * 8, cy - 8 - ((Math.floor(t / 250) + k) % 4), 1, 3); // heat
+      return;
+    }
+    // the cabin, burning, far off on the left
     rect(ctx, "K", cx, cy, 34, 22);
     for (let r = 0; r < 9; r++) rect(ctx, "K", cx - 4 + r * 2, cy - 1 - r, 42 - r * 4, 1);
     rect(ctx, step % 2 ? "O" : "Y", cx + 6, cy + 6, 6, 5); rect(ctx, step % 2 ? "Y" : "O", cx + 22, cy + 6, 6, 5);
@@ -131,7 +185,7 @@
   }
 
   // ------------------------------------------------------------- the handheld rescue scanner
-  function drawScanner(t, st) {
+  function drawScanner(t, st, v) {
     const step = reduce ? 0 : Math.floor(t / 125);
     const x = Math.max(96, Math.floor((W - 250) / 2 + 40)), y = 6;
     const w = Math.min(W - x - 6, 250), h = H - 38 - 6 - y;
@@ -146,7 +200,7 @@
       rect(ctx, "K", sx, sy, 3, 3); rect(ctx, "L", sx + 1, sy + 1, 1, 1);   // screws
     }
     // label plate
-    const plate = "WIFIND RESCUE SCANNER";
+    const plate = v.plate;
     rect(ctx, "K", x + 12, y + 9, textWidth(plate) + 8, 11); rect(ctx, "Y", x + 13, y + 10, textWidth(plate) + 6, 9);
     text(ctx, plate, x + 16, y + 11, "K");
 
@@ -159,12 +213,25 @@
     const room = { x: s.x + 6, y: s.y + 10, w: s.w - 12, h: s.h - 16 };
     for (let k = 0; k < room.w; k++) { rect(ctx, "m", room.x + k, room.y, 1, 1); rect(ctx, "m", room.x + k, room.y + room.h, 1, 1); }
     for (let k = 0; k < room.h; k++) { rect(ctx, "m", room.x, room.y + k, 1, 1); rect(ctx, "m", room.x + room.w, room.y + k, 1, 1); }
-    text(ctx, "ROOM 1", s.x + 3, s.y + 2, "l");
-    const curtainX = room.x + Math.floor(room.w * 0.32);
-    for (let k = 1; k < room.h; k += 3) rect(ctx, "R", curtainX, room.y + k, 1, 2);       // the curtain
+    text(ctx, v.place, s.x + 3, s.y + 2, "l");
+    if (mode === "rescue") {
+      const curtainX = room.x + Math.floor(room.w * 0.32);
+      for (let k = 1; k < room.h; k += 3) rect(ctx, "R", curtainX, room.y + k, 1, 2);     // the curtain
+    } else if (mode === "lights") {                                   // ceiling lamp; its light fills the room
+      const lx = room.x + Math.floor(room.w / 2), ly = room.y + 6;
+      if (v.light) for (let yy = room.y + 1; yy < room.y + room.h; yy++) for (let xx = room.x + 1; xx < room.x + room.w; xx++)
+        if (ditherPick(xx, yy, 0.25 - Math.hypot(xx - lx, yy - ly) / (room.w * 3))) rect(ctx, "Y", xx, yy, 1, 1);
+      ellipse(ctx, "K", lx, ly, 5, 3); ellipse(ctx, v.light ? "Y" : "G", lx, ly, 4, 2);
+    } else {                                                          // a car from above: body, seats
+      for (let yy = room.y + 4; yy < room.y + room.h - 3; yy += 2) { rect(ctx, "G", room.x + 4, yy, 1, 1); rect(ctx, "G", room.x + room.w - 4, yy, 1, 1); }
+      const seat = (fx, fy, fw, fh) => { rect(ctx, "m", room.x + Math.floor(room.w * fx), room.y + Math.floor(room.h * fy), Math.floor(room.w * fw), Math.floor(room.h * fh)); };
+      seat(0.12, 0.12, 0.22, 0.3); seat(0.12, 0.58, 0.22, 0.3);       // front seats
+      seat(0.52, 0.12, 0.3, 0.76);                                     // back bench
+      rect(ctx, "G", room.x + room.w - 6, room.y + 4, 2, room.h - 8);  // rear window
+    }
     const rxs = [0.25, 0.5, 0.75].map((f) => [room.x + 3, room.y + Math.round(room.h * f)]);
     const tx = [room.x + room.w - 4, room.y + Math.round(room.h * 0.5)];
-    const spot = [room.x + Math.floor(room.w * 0.64), room.y + Math.floor(room.h * 0.5)];
+    const spot = [room.x + Math.floor(room.w * (mode === "car" ? 0.67 : 0.64)), room.y + Math.floor(room.h * 0.5)];
     if (!S.online) {                                                  // no signal: static
       for (let i = 0; i < s.w * s.h / 9; i++) rect(ctx, ((i * 31 + step * 7) % 3) ? "D" : "m",
         s.x + ((i * 53 + step * 13) % s.w), s.y + ((i * 29 + step * 17) % s.h), 1, 1);
@@ -218,11 +285,12 @@
     }
     if (S.sense && S.sense.simulated) text(ctx, "DEMO DATA", l.x + 4, by + 12, "Y");
     const py = l.y + l.h - 22;
-    rect(ctx, "K", l.x + 3, py, l.w - 6, 19); rect(ctx, st.panel, l.x + 4, py + 1, l.w - 8, 17);
-    const flash = st.priority === "1" && (reduce || step % 4 < 2);           // red lamp for priority 1
-    rect(ctx, "K", l.x + 7, py + 6, 7, 7); rect(ctx, flash ? "Y" : "K", l.x + 8, py + 7, 5, 5);
-    text(ctx, "PRIORITY", l.x + 17, py + 6, "W", { shadow: "K" });
-    text(ctx, st.priority, l.x + l.w - 11 - textWidth(st.priority, true), py + 6, "W", { bold: true, shadow: "K" });
+    const flashing = v.flash && !reduce && step % 4 >= 2;                    // alerts blink
+    rect(ctx, "K", l.x + 3, py, l.w - 6, 19); rect(ctx, flashing ? "O" : v.panel, l.x + 4, py + 1, l.w - 8, 17);
+    rect(ctx, "K", l.x + 7, py + 6, 7, 7); rect(ctx, v.flash && !flashing ? "Y" : "K", l.x + 8, py + 7, 5, 5);
+    const shadow = v.ink === "K" ? null : "K";
+    text(ctx, v.box, l.x + 17, py + 6, v.ink, { shadow });
+    text(ctx, v.value, l.x + l.w - 9 - textWidth(v.value, true), py + 6, v.ink, { bold: true, shadow });
     // a couple of chunky buttons under the plate, for the toy feel
     for (const [bx, c] of [[x + w - 46, "R"], [x + w - 32, "B"], [x + w - 18, "g"]]) {
       ellipse(ctx, "K", bx, y + 14, 4, 4); ellipse(ctx, c, bx, y + 14, 3, 3); rect(ctx, "W", bx - 1, y + 12, 1, 1);
@@ -233,15 +301,16 @@
   let since = 0, lastKey = "";
   let backBtn = null, hoverBack = false;
   const clock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
-  function drawUI(t, st) {
-    if (st.key !== lastKey) { lastKey = st.key; since = t; }
+  let tabs = [];
+  function drawUI(t, st, v) {
+    if (st.key + mode !== lastKey) { lastKey = st.key + mode; since = t; }   // retype on a new reading or mode
     const dx = 4, dh = 35, dy = H - dh - 3, dw = W - 8;
     windowBox(ctx, dx, dy, dw, dh);
     rect(ctx, "K", dx + 5, dy + 5, 22, 22); rect(ctx, "R", dx + 6, dy + 6, 20, 20);
-    sprite(ctx, FIRE_GATOR, dx + 7, dy + 7);
-    text(ctx, "GATOR, RESCUE CREW", dx + 31, dy + 5, "Y");
+    sprite(ctx, v.helmet ? FIRE_GATOR : PORTRAIT, dx + 7, dy + (v.helmet ? 7 : 8));
+    text(ctx, v.crew, dx + 31, dy + 5, "Y");
     text(ctx, "PROTOTYPE", dx + dw - 7 - textWidth("PROTOTYPE"), dy + 5, "L");
-    const lines = wrap(st.say, dw - 40).slice(0, 2);
+    const lines = wrap(v.say, dw - 40).slice(0, 2);
     let shown = Math.floor((t - since) / (reduce ? 1 : 28));
     lines.forEach((ln, i) => { text(ctx, ln.slice(0, Math.max(0, shown)), dx + 31, dy + 14 + i * 9, "W"); shown -= ln.length; });
 
@@ -252,20 +321,41 @@
     rect(ctx, "Y", 10 - k, 21, 1, 5); rect(ctx, "Y", 9 - k, 22, 1, 3); rect(ctx, "Y", 8 - k, 23, 1, 1);
     text(ctx, label, 14, 20, "Y");
     backBtn = { x: 4, y: 16, w: bw, h: 15 };
+    // mode tabs: the same Wi-Fi sensing, three uses
+    tabs = [];
+    [["rescue", "FIRE RESCUE"], ["lights", "SMART LIGHTS"], ["car", "HOT CAR"]].forEach(([m, name], i) => {
+      const tw = textWidth("SMART LIGHTS") + 12, ty = 38 + i * 16;
+      windowBox(ctx, 4, ty, tw, 14, m === mode ? "T" : hoverTab === m ? "G" : "D");
+      text(ctx, name, 10, ty + 4, m === mode ? "Y" : "W");
+      tabs.push({ m, x: 4, y: ty, w: tw, h: 14 });
+    });
   }
 
   const toGame = (e) => { const r = screen.getBoundingClientRect(); return [(e.clientX - r.left) / SCALE, (e.clientY - r.top) / SCALE]; };
-  const onBack = ([x, y]) => backBtn && x >= backBtn.x && x < backBtn.x + backBtn.w && y >= backBtn.y && y < backBtn.y + backBtn.h;
-  screen.addEventListener("click", (e) => { if (onBack(toGame(e))) location.href = "/"; });
-  screen.addEventListener("mousemove", (e) => { hoverBack = onBack(toGame(e)); screen.style.cursor = hoverBack ? "pointer" : ""; });
+  const inside = (b, [x, y]) => b && x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h;
+  let hoverTab = null;
+  screen.addEventListener("click", (e) => {
+    const p = toGame(e);
+    if (inside(backBtn, p)) location.href = "/";
+    const tab = tabs.find((b) => inside(b, p));
+    if (tab) { mode = tab.m; history.replaceState(null, "", "#" + tab.m); }
+  });
+  screen.addEventListener("mousemove", (e) => {
+    const p = toGame(e);
+    hoverBack = inside(backBtn, p);
+    const tab = tabs.find((b) => inside(b, p));
+    hoverTab = tab ? tab.m : null;
+    screen.style.cursor = hoverBack || tab ? "pointer" : "";
+  });
 
   let lastSpoken = "";
   function frame(t) {
     const st = status();
-    drawWorld(t);
-    drawScanner(t, st);
-    drawUI(t, st);
-    const spoken = `Room 1: ${st.sign}. ${st.say}`;   // the same news for screen readers
+    const v = view(st, t);
+    drawWorld(t, v);
+    drawScanner(t, st, v);
+    drawUI(t, st, v);
+    const spoken = `${v.plate}: ${v.box} ${v.value}. ${v.say}`;   // the same news for screen readers
     if (spoken !== lastSpoken) { document.getElementById("live").textContent = spoken; lastSpoken = spoken; }
     requestAnimationFrame(frame);
   }
