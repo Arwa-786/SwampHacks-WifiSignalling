@@ -218,6 +218,10 @@ def create_app(multi, store: Store | None = None, speak: bool = False, auto_scan
         """Booth operator page: room scan, board map, raw waterfalls (not for judges)."""
         return FileResponse(os.path.join(HERE, "static", "tools.html"))
 
+    @app.get("/rescue")
+    def rescue_page():
+        return FileResponse(os.path.join(HERE, "static", "rescue.html"))
+
     @app.get("/api/live")
     def live(rows: int = 10):
         snap = multi.snapshot()
@@ -310,6 +314,8 @@ def create_app(multi, store: Store | None = None, speak: bool = False, auto_scan
             "calibrating": status["calibrating"],
             "motion": round(max(ratios), 2) if ratios else 0.0,
             "receivers": [r["state"] for r in snap["receivers"]],
+            "receiver_alive": [r.get("alive", False) for r in snap["receivers"]],
+            "simulated": isinstance(multi, FakeMulti),
             "ratios": [round(r, 2) for r in ratios],  # per board, for the swamp page's bobbers
             "detector": snap.get("detector", "rules"),
         }

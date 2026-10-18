@@ -15,6 +15,18 @@ def test_sense_gives_roblox_a_small_verdict():
     assert d["motion"] > 0
 
 
+def test_sense_exposes_simulation_and_receiver_health_for_rescue():
+    class InterruptedReceiver(FakeMulti):
+        def snapshot(self):
+            snap = super().snapshot()
+            snap["receivers"][0]["alive"] = False
+            return snap
+
+    d = TestClient(create_app(InterruptedReceiver())).get("/api/sense").json()
+    assert d["simulated"] is True
+    assert d["receiver_alive"] == [False, True, True]
+
+
 def test_phase_round_trip_and_rejects_unknown():
     c = client()
     assert c.post("/api/phase", json={"phase": "red"}).json()["ok"] is True

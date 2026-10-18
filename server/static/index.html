@@ -25,10 +25,13 @@
   canvas { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
     image-rendering: pixelated; image-rendering: crisp-edges; }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .sr:focus { position: fixed; left: 8px; top: 8px; width: auto; height: auto; clip: auto; padding: 6px 10px;
+    background: #1a1c2c; color: #ffcd75; outline: 3px solid #a7f070; z-index: 2; }
 </style>
 </head>
 <body>
 <canvas id="screen" aria-hidden="true"></canvas>
+<a class="sr" href="/rescue">Rescue Watch</a><!-- for keyboards and screen readers; the scene draws the button -->
 <div class="sr" id="live" aria-live="polite"></div>
 
 <script>
@@ -564,6 +567,23 @@
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   }
 
+  // "RESCUE WATCH" button, drawn in the scene's own pixels (under the legend)
+  let rescueBtn = null;
+  function drawRescueButton(t) {
+    const label = "RESCUE WATCH", w = textWidth(label) + 18, h = 15;
+    const x = 4, y = W < 300 ? H - 52 : 56;
+    windowBox(ctx, x, y, w, h, hoverRescue ? "T" : "D");
+    text(ctx, label, x + 5, y + 4, "Y");
+    const ax = x + w - 9, ay = y + 4, k = Math.floor(t / 400) % 2;   // a little blinking arrow
+    rect(ctx, "Y", ax + k, ay + 1, 1, 5); rect(ctx, "Y", ax + 1 + k, ay + 2, 1, 3); rect(ctx, "Y", ax + 2 + k, ay + 3, 1, 1);
+    rescueBtn = { x, y, w, h };
+  }
+  let hoverRescue = false;
+  const toGame = (e) => { const r = screen.getBoundingClientRect(); return [(e.clientX - r.left) / SCALE, (e.clientY - r.top) / SCALE]; };
+  const onRescue = ([gx, gy]) => rescueBtn && gx >= rescueBtn.x && gx < rescueBtn.x + rescueBtn.w && gy >= rescueBtn.y && gy < rescueBtn.y + rescueBtn.h;
+  screen.addEventListener("click", (e) => { if (onRescue(toGame(e))) location.href = "/rescue"; });
+  screen.addEventListener("mousemove", (e) => { hoverRescue = onRescue(toGame(e)); screen.style.cursor = hoverRescue ? "pointer" : ""; });
+
   function drawLegend() {
     if (W < 300) return;
     const x = 4, y = 17, w = 84, h = 36;
@@ -610,6 +630,7 @@
     drawSign(now);
     drawNotes(now);
     drawDialog(now);
+    drawRescueButton(now);
     text(ctx, "WIFIND", 5, 5, "Y", { outline: "K", shadow: "R" });
 
     const spoken = `${SCENES[scene].title}. ${S.say}`; // the same news for screen readers
