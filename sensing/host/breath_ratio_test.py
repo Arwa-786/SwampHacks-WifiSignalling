@@ -27,8 +27,9 @@ only for the test.
 Result (2026-10-18, first run): NO clear breathing signal. In breath_03 the
 breathing-speed wobble during holds was almost as large as during breathing
 (median score: amp 4.4 hold vs 5.2 breathing; ratio 5.7 vs 6.2), and lower right
-after the holds than during them, so this wobble is mostly sway/noise, not the
-chest. Thresholds tuned on breath_01/02 did not carry over to breath_03 either
+after the holds than during them. (Review: this only shows that THIS
+wobble-size detector fails; whole-recording filtfilt can leak across boundaries and
+"loudest board wins" lets one noisy board decide. See breath_rhythm_test.py.) Thresholds tuned on breath_01/02 did not carry over to breath_03 either
 (scores differ a lot between sessions). One hold session only: a first look.
 """
 
