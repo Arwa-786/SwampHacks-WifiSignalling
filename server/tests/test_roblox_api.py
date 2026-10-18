@@ -23,12 +23,13 @@ def test_phase_round_trip_and_rejects_unknown():
     assert c.get("/api/phase").json()["phase"] == "RED"
 
 
-def test_lobby_triggers_an_announced_room_scan():
+def test_scan_phase_triggers_an_announced_room_scan():
     import app as app_module
 
-    app_module.AUTO_SCAN_LEAD_S = 0.0
     c = TestClient(create_app(FakeMulti(), auto_scan=True))
     assert c.post("/api/phase", json={"phase": "LOBBY"}).json()["ok"]
+    assert c.get("/api/sense").json()["state"] != "SCANNING"  # lobby = step out, no scan yet
+    assert c.post("/api/phase", json={"phase": "SCAN"}).json()["ok"]
     assert c.get("/api/sense").json()["state"] == "SCANNING"
     assert c.post("/api/calibrate").json()["ok"] is False  # one scan at a time
 
@@ -55,10 +56,9 @@ def test_auto_scan_spoiled_by_movement_keeps_the_previous_scan():
         def restore_scan(self, saved, scan_time):
             self.restored = True
 
-    app_module.AUTO_SCAN_LEAD_S = 0.0
     multi = NoisyScan()
     c = TestClient(create_app(multi, auto_scan=True))
-    c.post("/api/phase", json={"phase": "LOBBY"})
+    c.post("/api/phase", json={"phase": "SCAN"})
     for _ in range(50):
         if multi.restored:
             break

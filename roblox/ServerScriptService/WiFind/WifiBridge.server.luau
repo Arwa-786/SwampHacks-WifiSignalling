@@ -1,7 +1,10 @@
 -- WifiBridge (Script): the only code that talks to the laptop.
 --   * polls GET  /api/sense  ~4x/s  -> WiFi.State / Motion / Receivers
---   * sends POST /api/phase  on every light change, so the booth speaker and
---     LEDs (the hidden player's only cue) follow the Roblox game.
+--   * sends POST /api/phase  on every booth step (LOBBY, SCAN, HIDE, COUNTDOWN,
+--     GREEN, RED, OUT, WON, PAUSED), so the booth speaker (the hidden player's
+--     only cue) follows the Roblox game and the laptop scans when told (SCAN)
+--   * after OUT / WON, fetches the AI gator's line (GET /api/ai/last) for the
+--     results card
 -- Needs Game Settings > Security > "Allow HTTP Requests" turned on.
 
 local HttpService = game:GetService("HttpService")
@@ -27,7 +30,33 @@ local function tellBooth(phase)
 		end
 	end)
 end
-WiFi.Booth.Event:Connect(tellBooth)
+-- The laptop writes the gator's line ~1-3 s after a catch or win; wait for a
+-- NEW line (not the previous round's) and show it on the results card.
+local function fetchGatorLine()
+	task.spawn(function()
+		local before = nil
+		pcall(function()
+			before = HttpService:JSONDecode(HttpService:GetAsync(base .. "/api/ai/last", true)).line
+		end)
+		for _ = 1, 8 do
+			task.wait(1)
+			local ok, last = pcall(function()
+				return HttpService:JSONDecode(HttpService:GetAsync(base .. "/api/ai/last", true))
+			end)
+			if ok and last.line and last.line ~= before then
+				Shared.GatorLine.Value = last.line
+				return
+			end
+		end
+	end)
+end
+
+WiFi.Booth.Event:Connect(function(phase)
+	tellBooth(phase)
+	if phase == "OUT" or phase == "WON" then
+		fetchGatorLine()
+	end
+end)
 -- GameLoop may announce the first LOBBY before this script connected; send the
 -- current phase once so the laptop still runs its first room scan.
 tellBooth(Shared.Phase.Value)

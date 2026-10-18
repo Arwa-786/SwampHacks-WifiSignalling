@@ -16,10 +16,21 @@ return {
 	-- 3-reading confirmation, and Roblox polling. 1.3 s eliminated a frozen player.
 	GRACE_S = 3.0,
 
-	-- the laptop's auto room scan (4 s to step out + 6 s scan) plus ~12 s for
-	-- the next player to walk in and settle (4 s was too short: the first real
-	-- player was caught still settling in)
-	INTERMISSION_S = 22,
+	-- Between rounds (Roblox runs this and tells the laptop each step):
+	STEP_OUT_S = 8, -- "Hider, step out!" (4 s was too short: people were still walking out)
+	SCAN_TIMEOUT_S = 14, -- the laptop's empty-room scan takes ~6 s; give up waiting after this
+	HIDE_S = 12, -- "Next hider, climb in" (the first real player was caught still settling in)
+	RESULTS_S = 9,
+	LOBBY_S = 15, -- lobby wait when the Wi-Fi is offline (online players only)
+
+	-- Red-light catches need this much steady movement, so one twitch or one
+	-- glitchy reading doesn't knock anyone out (Wi-Fi: ~3 readings in a row).
+	CATCH_HOLD_S = 0.75,
+	PLAYER_CATCH_HOLD_S = 0.2, -- keyboard players: forgives letting go of a key a beat late
+
+	-- Who sees the host buttons (START NOW / PAUSE / END ROUND / RESCAN). The
+	-- experience's owner and anyone testing in Studio are hosts automatically.
+	HOST_USERIDS = {},
 	ROUND_S = 90,
 	GREEN_RANGE_S = { 2.5, 6 },
 	RED_RANGE_S = { 3, 5 },

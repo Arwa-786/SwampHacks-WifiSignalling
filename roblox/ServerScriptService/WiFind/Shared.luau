@@ -2,7 +2,11 @@
 -- Required by both server scripts; a module runs once, so the folder is made once.
 --
 -- ReplicatedStorage.WiFind
---   Phase     StringValue  LOBBY / COUNTDOWN / GREEN / RED / RESULTS
+--   Phase     StringValue  LOBBY / SCAN / HIDE / COUNTDOWN / GREEN / RED / RESULTS
+--   Paused    BoolValue    host paused the game (nobody is judged, avatars stop)
+--   Results   StringValue  JSON for the results card: {title, sub, rows = {{label, value}}, caught}
+--   GatorLine StringValue  the AI gator's line about the last round (from the laptop)
+--   Host      RemoteEvent  client -> server: host buttons ("start" | "pause" | "end" | "rescan")
 --   Message   StringValue  big line on everyone's HUD
 --   TimeLeft  NumberValue  seconds left in the round
 --   CallRed   RemoteEvent  client -> server: "red light!" button
@@ -29,6 +33,10 @@ local wifi = make("Folder", "WiFi", root)
 
 return {
 	Phase = make("StringValue", "Phase", root, "LOBBY"),
+	Paused = make("BoolValue", "Paused", root, false),
+	Results = make("StringValue", "Results", root, ""),
+	GatorLine = make("StringValue", "GatorLine", root, ""),
+	Host = make("RemoteEvent", "Host", root),
 	Message = make("StringValue", "Message", root, "Starting..."),
 	TimeLeft = make("NumberValue", "TimeLeft", root, 0),
 	CallRed = make("RemoteEvent", "CallRed", root),

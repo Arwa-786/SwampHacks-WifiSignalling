@@ -14,6 +14,7 @@ local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local root = ReplicatedStorage:WaitForChild("WiFind")
 local Phase = root:WaitForChild("Phase")
+local Paused = root:WaitForChild("Paused")
 local State = root:WaitForChild("WiFi"):WaitForChild("State")
 
 local TOWARD_GATOR = Vector3.new(0, 0, -1)
@@ -49,6 +50,7 @@ RunService:BindToRenderStep("WifiControl", Enum.RenderPriority.Character.Value +
 	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
 	if humanoid and humanoid.Health > 0 then
 		local walking = State.Value == "MOVING" and (Phase.Value == "GREEN" or Phase.Value == "RED")
+			and not Paused.Value
 		humanoid:Move(walking and TOWARD_GATOR or Vector3.zero, false)
 	end
 end)

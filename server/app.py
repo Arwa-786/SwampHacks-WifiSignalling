@@ -54,9 +54,8 @@ LAYOUT_PATH = os.path.join(HERE, "layout.json")
 # per-board rule detectors decide.
 MODEL_PATH = os.path.join(HERE, "..", "sensing", "host", "models", "wifind_fused.json")
 SCAN_PATH = os.path.join(HERE, "room_scan.json")  # last room scan, restored on restart
-# Auto-scan between rounds (--auto-scan): when Roblox returns to the lobby, the
-# player gets AUTO_SCAN_LEAD_S to step out, then the empty room is scanned.
-AUTO_SCAN_LEAD_S = 8.0  # 4 s wasn't enough: the player was still walking out
+# Auto-scan between rounds (--auto-scan): Roblox gives the hider time to step
+# out (Config.STEP_OUT_S), then says SCAN and we scan the empty room.
 # Reject an auto-scan whose empty-room noise is this much above the previous
 # scan's on at least 2 boards: someone moved during it (it happened: +35-60%).
 SPOILED_SCAN_RATIO = 1.25
@@ -128,13 +127,25 @@ class PhaseBody(BaseModel):
     phase: str
 
 
-ROBLOX_PHASES = {"LOBBY", "GREEN", "RED", "OUT", "WON"}
-# The hidden player can't see any screen, so the light must be heard. Until the
-# booth speaker/LEDs exist, the laptop says it (macOS `say`; --speak).
-SPOKEN = {"GREEN": "Green light!", "RED": "Red light!", "OUT": "You're out! Wi-Fi caught you moving.", "WON": "You made it!"}
-SCAN_LINES = ["Please step out of the hiding spot. Scanning the room.",
-              "Someone moved during the scan. Keeping the previous scan. Next player, go in.",
-              "Room scanned. Next player, go in."]
+# Roblox runs the booth step by step and tells us each one:
+#   LOBBY (step out) -> SCAN (we scan the empty room now) -> HIDE -> COUNTDOWN
+#   -> GREEN/RED ... -> OUT or WON;  PAUSED when the host pauses.
+ROBLOX_PHASES = {"LOBBY", "SCAN", "HIDE", "COUNTDOWN", "GREEN", "RED", "OUT", "WON", "PAUSED"}
+# The hidden player can't see any screen, so every step must be heard
+# (laptop speaker; --speak). Short, clear, a little swampy.
+SPOKEN = {
+    "LOBBY": "Round over! Hider, come on out.",
+    "HIDE": "Next hider, climb in and get comfy.",
+    "COUNTDOWN": "Ready? Three. Two. One.",
+    "GREEN": "Green light!",
+    "RED": "Red light!",
+    "OUT": "Chomp! The Wi-Fi felt that.",
+    "WON": "You made it! The gator never saw you.",
+    "PAUSED": "Paused. Stay right where you are.",
+}
+SCAN_LINES = ["Shh. Listening to the empty swamp.",
+              "Something splashed during my scan, so I'm keeping the old one.",
+              "All quiet. Got it."]
 RECENT_S = 10.0  # motion history kept in memory for the gator's "what did the Wi-Fi see" facts
 
 
@@ -341,7 +352,7 @@ def create_app(multi, store: Store | None = None, speak: bool = False, auto_scan
         if phase not in ROBLOX_PHASES:
             return {"ok": False, "reason": "unknown phase"}
         now = time.time()
-        if phase == "GREEN" and status["roblox_phase"] in ("LOBBY", "OUT", "WON"):
+        if phase == "GREEN" and status["roblox_phase"] in ("LOBBY", "SCAN", "HIDE", "COUNTDOWN", "OUT", "WON"):
             status["round"] = {"start": now, "reds": 0}  # a new round begins
         elif phase == "RED":
             status["round"]["reds"] = status["round"].get("reds", 0) + 1
@@ -354,8 +365,8 @@ def create_app(multi, store: Store | None = None, speak: bool = False, auto_scan
             say(SPOKEN[phase])
         if gator and phase in ("OUT", "WON"):
             threading.Thread(target=gator_after_round, args=(phase,), daemon=True).start()
-        if auto_scan and phase == "LOBBY":
-            start_scan(AUTO_SCAN_S, AUTO_SCAN_LEAD_S, announce=True)
+        if auto_scan and phase == "SCAN":  # Roblox already gave the hider time to step out
+            start_scan(AUTO_SCAN_S, 0.0, announce=True)
         return {"ok": True}
 
     @app.get("/api/ai/last")
@@ -405,7 +416,7 @@ def main() -> None:
     parser.add_argument("--gator-model", default=None, help="Vultr model (default VULTR_CHAT_MODEL in .env; pick with gator_eval.py)")
     parser.add_argument("--gator-mode", choices=["tools", "prompt"], default="tools")
     parser.add_argument("--hub", help="Vultr hub URL to connect out to (hub.py); needs WIFIND_EDGE_TOKEN in .env")
-    parser.add_argument("--auto-scan", action="store_true", help="scan the empty room whenever Roblox returns to the lobby")
+    parser.add_argument("--auto-scan", action="store_true", help="scan the empty room when Roblox says SCAN (between rounds)")
     args = parser.parse_args()
 
     model = None if args.no_model or not os.path.exists(args.model) else args.model

@@ -2,7 +2,11 @@
 --   top:          GREEN LIGHT / RED LIGHT banner, message line, round timer
 --   bottom-left:  "Wi-Fi vision" card: what the sensors see of the real player
 --   bottom-right: RED LIGHT! button for online players and spectators
+--   centre:       between rounds, a card explaining the game + what's happening
+--                 (step out / scanning / hide); after a round, the results card
+--   top-left:     host buttons (START NOW, PAUSE, END ROUND, RESCAN), hosts only
 
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -14,6 +18,10 @@ local Phase = root:WaitForChild("Phase")
 local Message = root:WaitForChild("Message")
 local TimeLeft = root:WaitForChild("TimeLeft")
 local CallRed = root:WaitForChild("CallRed")
+local Paused = root:WaitForChild("Paused")
+local Results = root:WaitForChild("Results")
+local GatorLine = root:WaitForChild("GatorLine")
+local Host = root:WaitForChild("Host")
 local wifi = root:WaitForChild("WiFi")
 local WState = wifi:WaitForChild("State")
 local WMotion = wifi:WaitForChild("Motion")
@@ -115,6 +123,121 @@ button.Activated:Connect(function()
 	CallRed:FireServer()
 end)
 
+---------------------------------------------------------------- centre card
+
+-- One card in the middle of the screen. Between rounds it explains the game
+-- (people joining mid-way need to know a real person is hiding); after a round
+-- it shows the results.
+local cardC = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.52),
+	Size = UDim2.fromOffset(560, 330), BackgroundColor3 = PANEL, BackgroundTransparency = 0.04, Visible = false }, gui)
+round(cardC, 24)
+new("UIStroke", { Thickness = 3, Color = Color3.new(1, 1, 1), Transparency = 0.75 }, cardC)
+new("UIPadding", { PaddingLeft = UDim.new(0, 28), PaddingRight = UDim.new(0, 28), PaddingTop = UDim.new(0, 22),
+	PaddingBottom = UDim.new(0, 22) }, cardC)
+new("UIListLayout", { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }, cardC)
+local cTitle = text({ Size = UDim2.new(1, 0, 0, 46), Font = Enum.Font.GothamBlack, TextScaled = true, LayoutOrder = 1 }, cardC)
+local cSub = text({ Size = UDim2.new(1, 0, 0, 44), TextSize = 19, TextWrapped = true, TextColor3 = MUTED,
+	LayoutOrder = 2 }, cardC)
+local cRows = new("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+	BackgroundTransparency = 1, LayoutOrder = 3 }, cardC)
+new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, cRows)
+local cGator = text({ Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, TextSize = 20,
+	TextWrapped = true, TextColor3 = Color3.fromRGB(150, 230, 120), Font = Enum.Font.GothamMedium, LayoutOrder = 4 }, cardC)
+local cStatus = text({ Size = UDim2.new(1, 0, 0, 34), Font = Enum.Font.GothamBlack, TextScaled = true,
+	TextColor3 = CYAN, LayoutOrder = 5 }, cardC)
+
+local function setRows(rows)
+	for _, r in cRows:GetChildren() do
+		if r:IsA("Frame") then
+			r:Destroy()
+		end
+	end
+	for i, row in rows do
+		local line = new("Frame", { Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = Color3.fromRGB(36, 40, 58),
+			LayoutOrder = i }, cRows)
+		round(line, 10)
+		text({ Position = UDim2.fromOffset(14, 0), Size = UDim2.new(0.5, -14, 1, 0), Text = row[1], TextSize = 17,
+			TextColor3 = MUTED, TextXAlignment = Enum.TextXAlignment.Left }, line)
+		text({ Position = UDim2.new(0.5, 0, 0, 0), Size = UDim2.new(0.5, -14, 1, 0), Text = row[2], TextSize = 18,
+			Font = Enum.Font.GothamBlack, TextXAlignment = Enum.TextXAlignment.Right, TextTruncate = Enum.TextTruncate.AtEnd }, line)
+	end
+end
+
+local INTRO_ROWS = {
+	{ "Behind a curtain at the booth", "a real person" },
+	{ "Watching them", "only Wi-Fi, no camera" },
+	{ "The cyan avatar", "is them" },
+	{ "Your job", "call RED LIGHT!" },
+}
+local BETWEEN = { LOBBY = true, SCAN = true, HIDE = true }
+
+local function updateCard()
+	local phase = Phase.Value
+	if phase == "RESULTS" and Results.Value ~= "" then
+		local ok, r = pcall(HttpService.JSONDecode, HttpService, Results.Value)
+		if not ok then
+			return
+		end
+		cardC.Visible = true
+		cTitle.Text, cTitle.TextColor3 = r.title, r.caught and RED or GREEN
+		cSub.Text = r.sub
+		setRows(r.rows or {})
+		cGator.Text = GatorLine.Value ~= "" and ("Gator: \"" .. GatorLine.Value .. "\"") or ""
+		cStatus.Text = "Next round soon"
+	elseif BETWEEN[phase] then
+		cardC.Visible = true
+		cTitle.Text, cTitle.TextColor3 = "WIFIND: RED LIGHT, GREEN LIGHT", Color3.new(1, 1, 1)
+		cSub.Text = "Can Wi-Fi signals tell if someone hiding behind a curtain moves? Try to catch them."
+		setRows(INTRO_ROWS)
+		cGator.Text = ""
+		cStatus.Text = Message.Value
+	else
+		cardC.Visible = false
+	end
+end
+
+---------------------------------------------------------------- host buttons
+
+local hostPanel = new("Frame", { Position = UDim2.fromOffset(24, 56), Size = UDim2.fromOffset(170, 0),
+	AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Visible = false }, gui)
+new("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, hostPanel)
+text({ Size = UDim2.new(1, 0, 0, 16), Text = "HOST", TextSize = 13, TextColor3 = MUTED, LayoutOrder = 0,
+	TextXAlignment = Enum.TextXAlignment.Left }, hostPanel)
+local hostButtons = {}
+local function hostButton(cmd, label, color, order)
+	local b = new("TextButton", { Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = color, Font = Enum.Font.GothamBlack,
+		TextSize = 16, TextColor3 = Color3.new(1, 1, 1), Text = label, LayoutOrder = order, AutoButtonColor = true }, hostPanel)
+	round(b, 12)
+	b.Activated:Connect(function()
+		Host:FireServer(cmd)
+	end)
+	hostButtons[cmd] = b
+	return b
+end
+hostButton("start", "START NOW", Color3.fromRGB(40, 170, 90), 1)
+hostButton("pause", "PAUSE", Color3.fromRGB(90, 96, 130), 2)
+hostButton("end", "END ROUND", Color3.fromRGB(200, 70, 60), 3)
+hostButton("rescan", "RESCAN ROOM", Color3.fromRGB(40, 120, 170), 4)
+
+-- which host buttons make sense right now (the server checks again)
+local function updateHost()
+	hostPanel.Visible = Players.LocalPlayer:GetAttribute("WiFindHost") == true
+	local phase = Phase.Value
+	local usable = {
+		start = phase == "LOBBY" or phase == "HIDE",
+		pause = phase == "GREEN" or phase == "RED",
+		["end"] = phase == "COUNTDOWN" or phase == "GREEN" or phase == "RED",
+		rescan = phase == "LOBBY" or phase == "HIDE",
+	}
+	for cmd, b in hostButtons do
+		b.BackgroundTransparency = usable[cmd] and 0 or 0.65
+		b.TextTransparency = usable[cmd] and 0 or 0.4
+		b.Active = usable[cmd]
+	end
+	hostButtons.pause.Text = Paused.Value and "RESUME" or "PAUSE"
+end
+Players.LocalPlayer:GetAttributeChangedSignal("WiFindHost"):Connect(updateHost)
+
 ---------------------------------------------------------------- updates
 local STATE_LOOK = {
 	MOVING = { "MOVING", RED },
@@ -125,7 +248,10 @@ local STATE_LOOK = {
 	OFFLINE = { "WI-FI OFFLINE", MUTED },
 }
 local BANNER = {
-	LOBBY = { "LOBBY", PANEL, Color3.new(1, 1, 1) },
+	LOBBY = { "STEP OUT", PANEL, Color3.new(1, 1, 1) },
+	SCAN = { "SCANNING", CYAN, INK },
+	HIDE = { "HIDE!", Color3.fromRGB(255, 214, 10), INK },
+	PAUSED = { "PAUSED", Color3.fromRGB(90, 96, 130), Color3.new(1, 1, 1) },
 	COUNTDOWN = { "GET READY", Color3.fromRGB(255, 214, 10), INK },
 	GREEN = { "GREEN LIGHT", GREEN, INK },
 	RED = { "RED LIGHT", RED, Color3.new(1, 1, 1) },
@@ -133,7 +259,9 @@ local BANNER = {
 }
 
 local function onPhase()
-	local look = BANNER[Phase.Value] or BANNER.LOBBY
+	updateCard()
+	updateHost()
+	local look = BANNER[Paused.Value and "PAUSED" or Phase.Value] or BANNER.LOBBY
 	bannerText.Text, banner.BackgroundColor3, bannerText.TextColor3 = look[1], look[2], look[3]
 	banner.Size = UDim2.fromOffset(420, 78) -- pop, then settle
 	TweenService:Create(banner, TweenInfo.new(0.3, Enum.EasingStyle.Back), { Size = UDim2.fromOffset(380, 70) }):Play()
@@ -173,7 +301,13 @@ end
 Phase.Changed:Connect(onPhase)
 Message.Changed:Connect(function()
 	message.Text = Message.Value
+	if BETWEEN[Phase.Value] then
+		cStatus.Text = Message.Value
+	end
 end)
+Paused.Changed:Connect(onPhase)
+Results.Changed:Connect(updateCard)
+GatorLine.Changed:Connect(updateCard)
 TimeLeft.Changed:Connect(function()
 	timerText.Text = tostring(TimeLeft.Value)
 end)

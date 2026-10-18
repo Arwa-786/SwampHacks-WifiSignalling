@@ -84,6 +84,15 @@ Phase.Changed:Connect(function(phase)
 	end
 end)
 
+-- host pause: the music stops with the game
+root:WaitForChild("Paused").Changed:Connect(function(paused)
+	if paused then
+		music:Pause()
+	elseif Phase.Value == "GREEN" then
+		music:Resume()
+	end
+end)
+
 Fx.OnClientEvent:Connect(function(kind: string, character: Model?)
 	local hrp = character and character:FindFirstChild("HumanoidRootPart")
 	if kind == "caught" then

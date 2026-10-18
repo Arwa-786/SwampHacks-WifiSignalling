@@ -8,9 +8,17 @@
 --     grace period). With no such player in the server, a stand-in avatar runs.
 --   * online Roblox players, judged the usual way: Humanoid.MoveDirection.
 -- Anyone, including lobby spectators, can press "RED LIGHT!" to end a green early.
+--
+-- Between rounds Roblox runs the booth, step by step, and tells the laptop each one:
+--   RESULTS -> LOBBY ("Hider, step out!") -> SCAN (laptop learns the empty room)
+--   -> HIDE ("Next hider, climb in") -> COUNTDOWN -> GREEN/RED ... -> RESULTS
+-- Hosts (Config.HOST_USERIDS, the owner, or anyone in Studio) can START NOW,
+-- PAUSE, END ROUND and RESCAN from their HUD.
 
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage:WaitForChild("WiFindConfig"))
 local Shared = require(script.Parent.Shared)
@@ -49,30 +57,97 @@ local function rand(range)
 	return range[1] + math.random() * (range[2] - range[1])
 end
 
+---------------------------------------------------------------- clock + host
+
+-- Game time stops while the host has paused, so every timer simply waits.
+local pausedAt, pausedTotal = nil, 0
+local function now()
+	return (pausedAt or os.clock()) - pausedTotal
+end
+local function wait(dt)
+	task.wait(dt)
+	while Shared.Paused.Value do
+		task.wait(0.1)
+	end
+end
+
+-- The booth speaker/LEDs (the hidden player's only cue) follow these.
+local BOOTH_PHASES = { LOBBY = true, SCAN = true, HIDE = true, COUNTDOWN = true, GREEN = true, RED = true }
 local greenStartedAt = 0
 local function setPhase(phase)
 	Shared.Phase.Value = phase
 	if phase == "GREEN" then
-		greenStartedAt = os.clock()
+		greenStartedAt = now()
 	end
-	if phase == "GREEN" or phase == "RED" or phase == "LOBBY" then
-		WiFi.Booth:Fire(phase) -- speaker + LEDs inside the booth follow this
+	if BOOTH_PHASES[phase] then
+		WiFi.Booth:Fire(phase)
 	end
 end
+
+local function isHost(player)
+	return RunService:IsStudio()
+		or player.UserId == game.CreatorId
+		or table.find(Config.HOST_USERIDS, player.UserId) ~= nil
+end
+local function markHost(player)
+	player:SetAttribute("WiFindHost", isHost(player)) -- the HUD shows host buttons
+end
+Players.PlayerAdded:Connect(markHost)
+for _, p in Players:GetPlayers() do
+	markHost(p)
+end
+
+local request = { start = false, finish = false } -- set by host buttons, read by the loop
+local current = { runner = nil } -- the running round's Wi-Fi runner, for pause
+Shared.Host.OnServerEvent:Connect(function(player, cmd)
+	if not isHost(player) then
+		return
+	end
+	local phase = Shared.Phase.Value
+	if cmd == "start" and (phase == "LOBBY" or phase == "HIDE") then
+		request.start = true
+	elseif cmd == "end" and (phase == "COUNTDOWN" or phase == "GREEN" or phase == "RED") then
+		request.finish = true
+		if Shared.Paused.Value then -- un-pause so the loop can wrap up
+			pausedTotal += os.clock() - pausedAt
+			pausedAt = nil
+			Shared.Paused.Value = false
+		end
+	elseif cmd == "rescan" and (phase == "LOBBY" or phase == "HIDE") then
+		WiFi.Booth:Fire("SCAN") -- the laptop announces it and scans now
+	elseif cmd == "pause" and (phase == "GREEN" or phase == "RED") then
+		local paused = not Shared.Paused.Value
+		if paused then
+			pausedAt = os.clock()
+			local r = current.runner
+			if r and not r.player and r.status == "RUNNING" then
+				r.humanoid:Move(Vector3.zero)
+			end
+			Shared.Message.Value = "Paused by the host"
+			WiFi.Booth:Fire("PAUSED")
+		else
+			pausedTotal += os.clock() - pausedAt
+			pausedAt = nil
+			Shared.Message.Value = phase == "RED" and "Freeze!" or "Move!"
+			WiFi.Booth:Fire(phase) -- say the light again so the hider knows
+		end
+		Shared.Paused.Value = paused
+	end
+end)
 
 -- Red light called by a Roblox player. One shared cooldown so the hidden
 -- player isn't spammed, and never in the first 1.5 s of a green.
 local redCalledBy = nil
 local lastRedCall = -math.huge
 Shared.CallRed.OnServerEvent:Connect(function(player)
-	local now = os.clock()
-	if Shared.Phase.Value ~= "GREEN" or now - greenStartedAt < 1.5 then
+	local t = now()
+	if Shared.Phase.Value ~= "GREEN" or Shared.Paused.Value or t - greenStartedAt < 1.5 then
 		return
 	end
-	if now - lastRedCall < Config.RED_CALL_COOLDOWN_S then
+	if t - lastRedCall < Config.RED_CALL_COOLDOWN_S then
 		return
 	end
-	lastRedCall = now
+	lastRedCall = t
 	redCalledBy = player.DisplayName
 end)
 
@@ -180,6 +255,16 @@ local function liveCharacter(player)
 	return nil
 end
 
+local function clockText(seconds)
+	seconds = math.max(0, math.floor(seconds))
+	return ("%d:%02d"):format(seconds // 60, seconds % 60)
+end
+
+-- Fills the results card everyone sees after a round.
+local function showResults(result)
+	Shared.Results.Value = HttpService:JSONEncode(result)
+end
+
 local function runRound()
 	local wifiPlayer = WiFi.State.Value ~= "OFFLINE" and pickWifiPlayer() or nil
 	if wifiPlayer and not liveCharacter(wifiPlayer) then
@@ -204,21 +289,28 @@ local function runRound()
 		task.wait(3)
 		return
 	end
+	current.runner = runner
+	request.finish = false
 
 	setPhase("COUNTDOWN")
 	Course.setLight(course, true)
 	for i = 3, 1, -1 do
 		Shared.Message.Value = tostring(i)
-		task.wait(1)
+		wait(1)
 	end
 
-	local deadline = os.clock() + Config.ROUND_S
-	local finishers = 0
+	local startedAt = now()
+	local deadline = startedAt + Config.ROUND_S
+	local finishers, caughtOnline = {}, {}
+	local redLights, redStart = 0, nil
+	local caughtAfterRed = nil -- seconds after "red light" the Wi-Fi caught the hider
+	local endedAt = nil
+	local playerMovingSince = {}
 
 	-- Runs every 0.1 s. `judging` = red light and past the grace period.
 	-- Returns true when the round is over.
 	local function step(judging)
-		Shared.TimeLeft.Value = math.max(0, math.ceil(deadline - os.clock()))
+		Shared.TimeLeft.Value = math.max(0, math.ceil(deadline - now()))
 
 		if runner and runner.status == "RUNNING" then
 			local sensed = WiFi.State.Value
@@ -229,11 +321,14 @@ local function runRound()
 			end
 			runner.tag.Text = "REAL PLAYER · " .. (STATE_TEXT[sensed] or sensed)
 			Effects.wifiAura(runner.root.Position, sensed)
+			-- a catch needs steady movement, not one twitch (Config.CATCH_HOLD_S)
+			runner.movingSince = sensed == "MOVING" and (runner.movingSince or now()) or nil
 			if runner.root.Position.Z <= Course.FINISH_Z then
 				runner.status = "WON"
+				endedAt = now()
 				runner.humanoid:Move(Vector3.zero)
 				runner.tag.Text = "REAL PLAYER · MADE IT!"
-				finishers += 1
+				table.insert(finishers, "the hidden player")
 				if runner.player then
 					runner.player.leaderstats.Wins.Value += 1
 				end
@@ -241,7 +336,9 @@ local function runRound()
 				WiFi.Booth:Fire("WON")
 				Effects.confetti(runner.root.Position)
 				Shared.Fx:FireAllClients("won", runner.model)
-			elseif judging and sensed == "MOVING" then
+			elseif judging and runner.movingSince and now() - runner.movingSince >= Config.CATCH_HOLD_S then
+				endedAt = now()
+				caughtAfterRed = now() - redStart
 				knockOut(runner, "CAUGHT BY WI-FI")
 				Shared.Message.Value = "Wi-Fi caught the real player moving!"
 			end
@@ -253,16 +350,21 @@ local function runRound()
 				racers[player] = nil
 			elseif root.Position.Z <= Course.FINISH_Z then
 				racers[player] = nil
-				finishers += 1
+				table.insert(finishers, player.DisplayName)
 				player.leaderstats.Wins.Value += 1
 				Shared.Message.Value = player.DisplayName .. " reached the finish!"
 				Effects.confetti(root.Position)
-			elseif judging and humanoid.MoveDirection.Magnitude > Config.PLAYER_MOVE_EPS then
-				racers[player] = nil
-				Effects.caught(root.Position)
-				Shared.Fx:FireAllClients("caught", player.Character)
-				humanoid.Health = 0
-				Shared.Message.Value = player.DisplayName .. " moved on red!"
+			else
+				local moving = humanoid.MoveDirection.Magnitude > Config.PLAYER_MOVE_EPS
+				playerMovingSince[player] = moving and (playerMovingSince[player] or now()) or nil
+				if judging and moving and now() - playerMovingSince[player] >= Config.PLAYER_CATCH_HOLD_S then
+					racers[player] = nil
+					table.insert(caughtOnline, player.DisplayName)
+					Effects.caught(root.Position)
+					Shared.Fx:FireAllClients("caught", player.Character)
+					humanoid.Health = 0
+					Shared.Message.Value = player.DisplayName .. " moved on red!"
+				end
 			end
 		end
 
@@ -271,7 +373,10 @@ local function runRound()
 		if runner and runner.status ~= "RUNNING" then
 			return true
 		end
-		return (runner == nil and next(racers) == nil) or os.clock() >= deadline
+		if request.finish then
+			return true
+		end
+		return (runner == nil and next(racers) == nil) or now() >= deadline
 	end
 
 	local over = false
@@ -280,34 +385,36 @@ local function runRound()
 		setPhase("GREEN")
 		Course.setLight(course, false)
 		Shared.Message.Value = "Move!"
-		local greenEnd = os.clock() + rand(Config.GREEN_RANGE_S)
-		while os.clock() < greenEnd and not over do
+		local greenEnd = now() + rand(Config.GREEN_RANGE_S)
+		while now() < greenEnd and not over do
 			if redCalledBy then
 				break
 			end
 			over = step(false)
-			task.wait(0.1)
+			wait(0.1)
 		end
 		if over then
 			break
 		end
 
 		setPhase("RED")
+		redLights += 1
 		Course.setLight(course, true)
 		Shared.Message.Value = redCalledBy and (redCalledBy .. " called RED LIGHT!") or "Freeze!"
-		local redStart = os.clock()
+		redStart = now()
 		local redEnd = redStart + rand(Config.RED_RANGE_S)
-		while os.clock() < redEnd and not over do
-			over = step(os.clock() - redStart >= Config.GRACE_S)
-			task.wait(0.1)
+		while now() < redEnd and not over do
+			over = step(now() - redStart >= Config.GRACE_S)
+			wait(0.1)
 		end
 	end
+	current.runner = nil
+	endedAt = endedAt or now()
 
-	setPhase("RESULTS")
-	Course.setLight(course, true)
 	-- Only running out of time eliminates the unfinished; a round that ends
-	-- because the real player won or was caught just ends.
-	if os.clock() >= deadline then
+	-- because the real player won or was caught (or the host ended it) just ends.
+	local timeUp = now() >= deadline and not request.finish
+	if timeUp then
 		for player in racers do
 			local humanoid = liveCharacter(player)
 			if humanoid then
@@ -315,15 +422,43 @@ local function runRound()
 			end
 		end
 	end
-	if runner and runner.status == "RUNNING" then
+	if runner and runner.status == "RUNNING" and timeUp then
 		knockOut(runner, "TIME'S UP")
 	end
-	if runner and runner.status == "OUT" then
-		Shared.Message.Value = "Round over · Wi-Fi caught the real player"
+
+	-- The results card: what happened, in plain words.
+	local survived = clockText(endedAt - startedAt)
+	local result = { rows = {}, caught = false }
+	if request.finish then
+		result.title, result.sub = "ROUND ENDED", "The host ended this round early"
+	elseif runner and runner.status == "WON" then
+		result.title, result.sub = "THE HIDER MADE IT!", "The Wi-Fi never caught them moving on red"
+	elseif runner and caughtAfterRed then
+		result.title, result.caught = "CAUGHT BY WI-FI", true
+		result.sub = ("They moved %.1f s after red light, and the Wi-Fi felt it"):format(caughtAfterRed)
+	elseif runner then
+		result.title, result.sub = "TIME'S UP", "The hider didn't reach the gator in time"
 	else
-		Shared.Message.Value = ("Round over · %d reached the finish"):format(finishers)
+		result.title, result.sub = "ROUND OVER", "Online players only this time: the Wi-Fi is offline"
 	end
-	task.wait(5)
+	if runner then
+		local survivedReds = math.max(0, redLights - (caughtAfterRed and 1 or 0))
+		table.insert(result.rows, { "Hider survived", survived })
+		table.insert(result.rows, { "Red lights survived", tostring(survivedReds) })
+	end
+	if #finishers > 0 then
+		table.insert(result.rows, { "Made it", table.concat(finishers, ", ") })
+	end
+	if #caughtOnline > 0 then
+		table.insert(result.rows, { "Moved on red", table.concat(caughtOnline, ", ") })
+	end
+	Shared.GatorLine.Value = "" -- the bridge fills in the AI gator's line when the laptop has it
+	showResults(result)
+	Shared.Message.Value = result.title
+	setPhase("RESULTS")
+	Course.setLight(course, true)
+	request.finish = false
+	task.wait(Config.RESULTS_S)
 
 	if runner and runner.player then
 		runner.player:SetAttribute("WiFiControlled", false) -- keyboard back on
@@ -335,13 +470,60 @@ local function runRound()
 	end
 end
 
-while true do
-	setPhase("LOBBY")
-	Course.setLight(course, false)
-	for i = Config.INTERMISSION_S, 1, -1 do
-		Shared.Message.Value = ("Next round in %d"):format(i)
-		Shared.TimeLeft.Value = i
-		task.wait(1)
+---------------------------------------------------------------- between rounds
+
+-- Counts down `seconds`, showing `text`; returns early when a host presses
+-- START NOW (if `skippable`) or when `doneEarly()` says so.
+local function countdown(seconds, text, skippable, doneEarly)
+	local stop = os.clock() + seconds
+	while os.clock() < stop do
+		if skippable and request.start then
+			return "start"
+		end
+		if doneEarly and doneEarly() then
+			return "done"
+		end
+		Shared.Message.Value = text
+		Shared.TimeLeft.Value = math.ceil(stop - os.clock())
+		task.wait(0.2)
 	end
+	return "timeout"
+end
+
+-- LOBBY -> SCAN -> HIDE. The laptop scans the empty room only when Roblox
+-- says SCAN, so a scan can never start in the middle of a round. A host's
+-- START NOW skips whatever is left (skipping the scan keeps the previous one).
+local function betweenRounds()
+	request.start = false
+	Shared.Results.Value = ""
+	Course.setLight(course, false)
+	if WiFi.State.Value == "OFFLINE" then
+		setPhase("LOBBY")
+		countdown(Config.LOBBY_S, "Wi-Fi offline · online players only", true)
+		request.start = false
+		return
+	end
+
+	setPhase("LOBBY")
+	if countdown(Config.STEP_OUT_S, "Hider, step out of the booth!", true) == "start" then
+		request.start = false
+		return
+	end
+
+	setPhase("SCAN") -- the laptop says "listening to the empty swamp" and scans
+	local sawScan = false
+	countdown(Config.SCAN_TIMEOUT_S, "Listening to the empty swamp...", false, function()
+		local st = WiFi.State.Value
+		sawScan = sawScan or st == "SCANNING"
+		return (sawScan and st ~= "SCANNING") or st == "OFFLINE"
+	end)
+
+	setPhase("HIDE")
+	countdown(Config.HIDE_S, "Next hider, climb in and get comfy!", true)
+	request.start = false
+end
+
+while true do
+	betweenRounds()
 	runRound()
 end
