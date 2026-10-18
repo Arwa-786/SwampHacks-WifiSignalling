@@ -498,10 +498,16 @@ local function betweenRounds()
 	Shared.Results.Value = ""
 	Course.setLight(course, false)
 	if WiFi.State.Value == "OFFLINE" then
+		-- also the first seconds after the server starts, before the bridge's
+		-- first answer: if the Wi-Fi comes online, run the full booth sequence
 		setPhase("LOBBY")
-		countdown(Config.LOBBY_S, "Wi-Fi offline · online players only", true)
-		request.start = false
-		return
+		local how = countdown(Config.LOBBY_S, "Wi-Fi offline · online players only", true, function()
+			return WiFi.State.Value ~= "OFFLINE"
+		end)
+		if how ~= "done" then
+			request.start = false
+			return
+		end
 	end
 
 	setPhase("LOBBY")

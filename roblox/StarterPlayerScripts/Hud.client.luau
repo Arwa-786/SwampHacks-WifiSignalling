@@ -4,7 +4,7 @@
 --   bottom-right: RED LIGHT! button for online players and spectators
 --   centre:       between rounds, a card explaining the game + what's happening
 --                 (step out / scanning / hide); after a round, the results card
---   top-left:     host buttons (START NOW, PAUSE, END ROUND, RESCAN), hosts only
+--   right:        host buttons under the timer (START NOW, PAUSE, END ROUND, RESCAN), hosts only
 
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
@@ -128,8 +128,9 @@ end)
 -- One card in the middle of the screen. Between rounds it explains the game
 -- (people joining mid-way need to know a real person is hiding); after a round
 -- it shows the results.
-local cardC = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.52),
-	Size = UDim2.fromOffset(560, 330), BackgroundColor3 = PANEL, BackgroundTransparency = 0.04, Visible = false }, gui)
+local cardC = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+	Size = UDim2.fromOffset(540, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundColor3 = PANEL,
+	BackgroundTransparency = 0.04, Visible = false }, gui)
 round(cardC, 24)
 new("UIStroke", { Thickness = 3, Color = Color3.new(1, 1, 1), Transparency = 0.75 }, cardC)
 new("UIPadding", { PaddingLeft = UDim.new(0, 28), PaddingRight = UDim.new(0, 28), PaddingTop = UDim.new(0, 22),
@@ -194,11 +195,13 @@ local function updateCard()
 	else
 		cardC.Visible = false
 	end
+	message.Visible = not cardC.Visible -- the card already says it
 end
 
 ---------------------------------------------------------------- host buttons
 
-local hostPanel = new("Frame", { Position = UDim2.fromOffset(24, 56), Size = UDim2.fromOffset(170, 0),
+local hostPanel = new("Frame", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -24, 0, 140),
+	Size = UDim2.fromOffset(150, 0),
 	AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Visible = false }, gui)
 new("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, hostPanel)
 text({ Size = UDim2.new(1, 0, 0, 16), Text = "HOST", TextSize = 13, TextColor3 = MUTED, LayoutOrder = 0,
