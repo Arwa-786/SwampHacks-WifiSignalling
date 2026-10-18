@@ -102,147 +102,140 @@
   }
 
   // ------------------------------------------------------------- the night swamp + burning cabin
-  function drawWorld(t, st) {
+  // ------------------------------------------------------------- the night: a burning cabin on the horizon
+  function drawWorld(t) {
     const step = reduce ? 0 : Math.floor(t / 125);
-    const groundY = H - 42;
-    // sky: night, glowing orange near the fire (dithered, never a smooth gradient)
-    for (let y = 0; y < groundY; y++) for (let x = 0; x < W; x++) {
-      const tt = (y / groundY - 0.35) / 0.5;
+    const horizon = H - 62;
+    for (let y = 0; y < horizon; y++) for (let x = 0; x < W; x++) {   // night sky, fire glow low down
+      const tt = (y / horizon - 0.45) / 0.55;
       ctx.fillStyle = Pixel.P[tt <= 0 ? "K" : tt >= 1 ? "P" : (ditherPick(x, y, tt) ? "P" : "N")];
       ctx.fillRect(x, y, 1, 1);
     }
-    for (let i = 0; i < W / 5; i++) rect(ctx, "W", (i * 97) % W, (i * 53) % Math.floor(groundY * 0.4), 1, 1); // stars
-    ellipse(ctx, "W", W - 30, 22, 6, 6); rect(ctx, "L", W - 33, 20, 2, 2); // moon
-    // far treeline
-    for (let x = 0; x < W; x += 14) { ellipse(ctx, "D", x + 7, groundY - 18 - ((x * 7) % 9), 8, 8); rect(ctx, "D", x, groundY - 18, 16, 18); }
-    // swamp water
-    rect(ctx, "N", 0, groundY, W, H - groundY); rect(ctx, "T", 0, groundY, W, 1);
-    for (let i = 0; i < W / 9; i++) rect(ctx, "G", ((i * 37) + Math.floor(step / 3)) % W, groundY + 3 + (i * 7) % 30, 3 + i % 4, 1);
-
-    // the cabin on stilts, front wall cut away
-    const cw = Math.min(210, W - 140), ch = Math.min(80, groundY - 76);
-    const x0 = Math.max(6, Math.floor((W - 120 - cw) / 2)), x1 = x0 + cw;
-    const floorY = groundY - 10, ceilY = floorY - ch;
-    for (const sx of [x0 + 8, x0 + cw / 2, x1 - 10]) { rect(ctx, "K", sx - 1, floorY, 5, 14); rect(ctx, "d", sx, floorY, 3, 13); }
-    // fire glow on the water under the cabin
-    for (let x = x0; x < x1; x += 2) if ((x + step) % 6 < 3) rect(ctx, "O", x, groundY + 2 + (x % 5), 1, 1);
-    rect(ctx, "K", x0 - 2, ceilY - 2, cw + 4, ch + 6);
-    for (let y = ceilY; y < floorY; y++) rect(ctx, (y - ceilY) % 6 < 5 ? "w" : "d", x0, y, cw, 1); // back wall planks
-    for (let y = ceilY + 2; y < floorY; y += 6) for (let x = x0 + ((y * 7) % 11); x < x1; x += 23) rect(ctx, "d", x, y, 6, 1);
-    rect(ctx, "d", x0, floorY - 3, cw, 3); rect(ctx, "K", x0, floorY, cw, 2);   // floor
-    // a back window showing flames outside
-    const wx = x0 + Math.floor(cw * 0.45), wy = ceilY + 10;
-    rect(ctx, "K", wx - 1, wy - 1, 18, 14); rect(ctx, (step % 2) ? "O" : "R", wx, wy, 16, 12);
-    sprite(ctx, FLAME[step % 3], wx + 3, wy - 2);                   // fire seen through the back window
-    rect(ctx, "K", wx + 7, wy, 1, 12); rect(ctx, "K", wx, wy + 6, 16, 1);
-    // roof: a gable, sloping 1 pixel up for every 3 in
-    const rl = x0 - 8, rr = x1 + 8, rows = Math.floor((rr - rl) / 6);
-    for (let r = 0; r < rows; r++) {
-      const y = ceilY - 3 - r;
-      rect(ctx, "K", rl + r * 3 - 1, y, rr - rl - r * 6 + 2, 1);
-      rect(ctx, (r >> 1) % 2 ? "d" : "w", rl + r * 3 + 1, y, rr - rl - r * 6 - 2, 1);
+    for (let i = 0; i < W / 6; i++) {                                   // stars, scattered (not in rows)
+      const hx = (i * 2654435761) >>> 0;
+      rect(ctx, (i % 7) ? "W" : "Y", hx % W, 4 + ((hx >>> 12) % Math.floor(horizon * 0.5)), 1, 1);
     }
-    rect(ctx, "K", rl - 1, ceilY - 2, rr - rl + 2, 2);
-    const roofY = (x) => ceilY - 3 - Math.floor(Math.min(x - rl, rr - x) / 3);
-    // flames on the roof and out of the window, embers rising, smoke drifting
-    for (const [fx, k] of [[x1 - 58, 0], [x1 - 40, 1], [x1 - 24, 2]]) sprite(ctx, FLAME[(step + k) % 3], fx, roofY(fx + 5) - 12);
-    for (let i = 0; i < 18; i++) {
-      const life = ((step * 2 + i * 17) % 60) / 60, ex = x1 - 56 + ((i * 13) % 44);
-      rect(ctx, life < 0.5 ? "Y" : "O", ex + Math.round(Math.sin(life * 6 + i) * 3), roofY(ex) - 14 - Math.round(life * 50), 1, 1);
+    for (let x = 0; x < W; x += 12) { ellipse(ctx, "K", x + 6, horizon - 10 - ((x * 7) % 7), 7, 7); rect(ctx, "K", x, horizon - 10, 14, 10); }
+    // the cabin, burning, far off on the left
+    const cx = 18, cy = horizon - 22;
+    rect(ctx, "K", cx, cy, 34, 22);
+    for (let r = 0; r < 9; r++) rect(ctx, "K", cx - 4 + r * 2, cy - 1 - r, 42 - r * 4, 1);
+    rect(ctx, step % 2 ? "O" : "Y", cx + 6, cy + 6, 6, 5); rect(ctx, step % 2 ? "Y" : "O", cx + 22, cy + 6, 6, 5);
+    for (let k = 0; k < 3; k++) sprite(ctx, FLAME[(step + k) % 3], cx + 2 + k * 11, cy - 22 + (k % 2) * 3);
+    for (let i = 0; i < 6; i++) {                                      // smoke rising off it
+      const life = ((step + i * 10) % 60) / 60, px = cx + 20 + Math.round(life * 50), py = cy - 26 - Math.round(life * 40);
+      for (let y = -3; y <= 3; y++) for (let x = -5; x <= 5; x++)
+        if (x * x / 25 + y * y / 9 <= 1 && ditherPick(px + x, py + y, 0.55 - life * 0.45)) rect(ctx, "G", px + x, py + y, 1, 1);
     }
-    for (let i = 0; i < 7; i++) {
-      const life = ((step + i * 9) % 64) / 64;
-      const px = x1 - 34 - Math.round(life * 60) + i * 3, py = roofY(x1 - 34) - 18 - Math.round(life * 45);
-      for (let y = -3; y <= 3; y++) for (let x = -6; x <= 6; x++) if (x * x / 36 + y * y / 9 <= 1 && ditherPick(px + x, py + y, 0.6 - life * 0.4))
-        rect(ctx, life < 0.5 ? "G" : "D", px + x, py + y, 1, 1);
-    }
-    // smoke filling the top of the room (it's why a camera can't see)
-    for (let y = ceilY; y < ceilY + Math.floor(ch * 0.45); y++) for (let x = x0; x < x1; x++) {
-      const dens = 0.75 - (y - ceilY) / (ch * 0.6);
-      if (ditherPick(x + Math.floor(step / 2), y, dens)) rect(ctx, (y + x) % 3 ? "G" : "L", x, y, 1, 1);
-    }
-
-    // inside: receivers on the left wall, curtain, hiding spot, lantern on the right wall
-    const rxs = [0.3, 0.5, 0.7].map((f) => [x0 + 4, Math.round(ceilY + ch * f)]);
-    const tx = [x1 - 14, Math.round(ceilY + ch * 0.45)];
-    const curtainX = x0 + Math.floor(cw * 0.28);
-    const hide = [x0 + Math.floor(cw * 0.62), floorY - 16];
-    const lit = st.key === "still" || st.key === "moving";
-    for (const [rx, ry] of rxs) {           // Wi-Fi lines: they cross the hiding spot
-      const n = Math.max(Math.abs(tx[0] - rx), Math.abs(tx[1] - ry));
-      for (let k = 0; k < n; k += 4) rect(ctx, lit ? "l" : "L", rx + 5 + Math.round((tx[0] - rx) * k / n), ry + 2 + Math.round((tx[1] + 3 - ry) * k / n), 2, 1);
-    }
-    for (const [rx, ry] of rxs) { rect(ctx, "K", rx - 1, ry - 1, 8, 7); rect(ctx, "S", rx, ry, 6, 5); rect(ctx, "C", rx + 1, ry + 1, 2, 1); }
-    rect(ctx, "K", curtainX - 2, ceilY + 2, 18, 2);
-    for (let y = ceilY + 4; y < floorY - 3; y++) for (let x = 0; x < 14; x++)
-      rect(ctx, x % 4 === 0 ? "R" : "P", curtainX + x + ((y >> 3) % 2 && x % 4 === 0 ? 1 : 0), y, 1, 1);
-    for (let k = 0; k < 9; k++) {                                  // tape X on the floor
-      rect(ctx, "Y", hide[0] - 5 + k, floorY - 12 + k, 2, 1); rect(ctx, "Y", hide[0] + 3 - k, floorY - 12 + k, 2, 1);
-    }
-    sprite(ctx, LANTERN, tx[0], tx[1]);
-    if (!reduce && (step % 8) < 4) ring(ctx, "Y", tx[0] + 3, tx[1] + 3, 6 + (step % 4) * 2, 2);
-
-    // the Wi-Fi echo at the hiding spot: the only thing drawn about the person
-    if (st.key === "still") {
-      const rate = breathing().rate;                 // breaths per minute -> one ring cycle per breath
-      const cycle = rate ? 60000 / rate : 1500;
-      const r = 3 + (reduce ? 0 : Math.floor(((t % cycle) / cycle) * 12));
-      ring(ctx, "C", hide[0], hide[1], r, r > 9 ? 3 : 1);
-      ring(ctx, "C", hide[0], hide[1], Math.max(2, r - 6), 1);
-      ellipse(ctx, "C", hide[0], hide[1], 1, 1);
-    } else if (st.key === "moving") {
-      for (let k = 0; k < 3; k++) {
-        const r = 4 + ((step * 2 + k * 5) % 15);
-        ring(ctx, k % 2 ? "Y" : "O", hide[0] + (reduce ? 0 : ((step + k) % 3) - 1), hide[1] + (reduce ? 0 : (step % 2)), r, r > 12 ? 3 : 1);
-      }
-      ellipse(ctx, "Y", hide[0], hide[1], 2, 2);
-    }
-    // labels under the cabin
-    text(ctx, "RX", rxs[2][0] - 1, floorY + 4, "C");
-    text(ctx, "TX", tx[0] + 1, floorY + 4, "Y");
-    text(ctx, "HIDING SPOT", hide[0] - Math.floor(textWidth("HIDING SPOT") / 2), floorY + 4, "Y");
+    rect(ctx, "N", 0, horizon, W, H - horizon); rect(ctx, "T", 0, horizon, W, 1);   // swamp water
+    for (let x = 0; x < 60; x += 2) if ((x + step) % 5 < 2) rect(ctx, "O", cx - 6 + x, horizon + 2 + (x % 4), 1, 1);
   }
 
-  // ------------------------------------------------------------- UI: sign, notes, dialog, back button
+  // ------------------------------------------------------------- the handheld rescue scanner
+  function drawScanner(t, st) {
+    const step = reduce ? 0 : Math.floor(t / 125);
+    const x = Math.max(96, Math.floor((W - 250) / 2 + 40)), y = 6;
+    const w = Math.min(W - x - 6, 250), h = H - 38 - 6 - y;
+    // antenna + blinking tip
+    rect(ctx, "K", x + w - 22, y - 2, 3, 12); rect(ctx, "G", x + w - 21, y - 1, 1, 10);
+    rect(ctx, (step % 8 < 4 && S.online) ? "l" : "D", x + w - 22, y - 4, 3, 3);
+    // body: chunky orange casing, corners cut, light top edge, dark bottom edge
+    rect(ctx, "K", x + 2, y + 4, w - 4, h - 4); rect(ctx, "K", x, y + 6, w, h - 8);
+    rect(ctx, "O", x + 2, y + 6, w - 4, h - 8);
+    rect(ctx, "Y", x + 3, y + 6, w - 6, 1); rect(ctx, "R", x + 3, y + h - 6, w - 6, 3);
+    for (const [sx, sy] of [[x + 5, y + 9], [x + w - 8, y + 9], [x + 5, y + h - 10], [x + w - 8, y + h - 10]]) {
+      rect(ctx, "K", sx, sy, 3, 3); rect(ctx, "L", sx + 1, sy + 1, 1, 1);   // screws
+    }
+    // label plate
+    const plate = "WIFIND RESCUE SCANNER";
+    rect(ctx, "K", x + 12, y + 9, textWidth(plate) + 8, 11); rect(ctx, "Y", x + 13, y + 10, textWidth(plate) + 6, 9);
+    text(ctx, plate, x + 16, y + 11, "K");
+
+    // the radar screen: a top-down map of room 1
+    const s = { x: x + 10, y: y + 24, w: Math.floor((w - 20) * 0.6), h: h - 36 };
+    rect(ctx, "K", s.x - 2, s.y - 2, s.w + 4, s.h + 4); rect(ctx, "D", s.x - 1, s.y - 1, s.w + 2, s.h + 2);
+    rect(ctx, "f", s.x, s.y, s.w, s.h);
+    for (let gx = s.x + 6; gx < s.x + s.w; gx += 8) for (let gy = s.y; gy < s.y + s.h; gy += 2) rect(ctx, "K", gx, gy, 1, 1);
+    for (let gy = s.y + 6; gy < s.y + s.h; gy += 8) for (let gx = s.x; gx < s.x + s.w; gx += 2) rect(ctx, "K", gx, gy, 1, 1);
+    const room = { x: s.x + 6, y: s.y + 10, w: s.w - 12, h: s.h - 16 };
+    for (let k = 0; k < room.w; k++) { rect(ctx, "m", room.x + k, room.y, 1, 1); rect(ctx, "m", room.x + k, room.y + room.h, 1, 1); }
+    for (let k = 0; k < room.h; k++) { rect(ctx, "m", room.x, room.y + k, 1, 1); rect(ctx, "m", room.x + room.w, room.y + k, 1, 1); }
+    text(ctx, "ROOM 1", s.x + 3, s.y + 2, "l");
+    const curtainX = room.x + Math.floor(room.w * 0.32);
+    for (let k = 1; k < room.h; k += 3) rect(ctx, "R", curtainX, room.y + k, 1, 2);       // the curtain
+    const rxs = [0.25, 0.5, 0.75].map((f) => [room.x + 3, room.y + Math.round(room.h * f)]);
+    const tx = [room.x + room.w - 4, room.y + Math.round(room.h * 0.5)];
+    const spot = [room.x + Math.floor(room.w * 0.64), room.y + Math.floor(room.h * 0.5)];
+    if (!S.online) {                                                  // no signal: static
+      for (let i = 0; i < s.w * s.h / 9; i++) rect(ctx, ((i * 31 + step * 7) % 3) ? "D" : "m",
+        s.x + ((i * 53 + step * 13) % s.w), s.y + ((i * 29 + step * 17) % s.h), 1, 1);
+      const msg = "NO SIGNAL";
+      rect(ctx, "K", s.x + s.w / 2 - textWidth(msg) / 2 - 3, s.y + s.h / 2 - 6, textWidth(msg) + 6, 11);
+      text(ctx, msg, s.x + Math.floor(s.w / 2 - textWidth(msg) / 2), s.y + Math.floor(s.h / 2) - 4, "l");
+    } else {
+      // Wi-Fi waves pulsing out from the transmitter, dotted as they fade
+      for (let k = 0; k < 3; k++) {
+        const r = 3 + ((step + k * 9) % 27);
+        ring(ctx, r > 18 ? "m" : "g", tx[0], tx[1], r, r > 12 ? 3 : 1);
+      }
+      for (const [rx, ry] of rxs) { rect(ctx, "K", rx - 2, ry - 2, 5, 5); rect(ctx, "C", rx - 1, ry - 1, 3, 3); }
+      rect(ctx, "K", tx[0] - 2, tx[1] - 2, 5, 5); rect(ctx, "Y", tx[0] - 1, tx[1] - 1, 3, 3);
+      if (st.key === "still") {                                       // a steady blip that breathes
+        const rate = breathing().rate, cycle = rate ? 60000 / rate : 2400;
+        const big = !reduce && (t % cycle) < cycle / 2;
+        ellipse(ctx, "Y", spot[0], spot[1], big ? 3 : 2, big ? 3 : 2); ellipse(ctx, "W", spot[0], spot[1], 1, 1);
+        ring(ctx, "Y", spot[0], spot[1], big ? 6 : 5, 2);
+      } else if (st.key === "moving") {                               // a jittery blip with a trail
+        for (let k = 3; k >= 0; k--) {
+          const jx = reduce ? 0 : ((step - k) * 7 % 5) - 2, jy = reduce ? 0 : ((step - k) * 3 % 5) - 2;
+          rect(ctx, k ? "R" : "O", spot[0] + jx - 1, spot[1] + jy - 1, k ? 2 : 3, k ? 2 : 3);
+        }
+      } else if (st.key === "scan") {
+        const msg = "SCANNING...";
+        text(ctx, msg, s.x + Math.floor(s.w / 2 - textWidth(msg) / 2), s.y + s.h - 9, "l");
+      }
+    }
+
+    // the LCD readout
+    const l = { x: s.x + s.w + 8, y: s.y - 2, w: x + w - 10 - (s.x + s.w + 8), h: s.h + 4 };
+    rect(ctx, "K", l.x, l.y, l.w, l.h); rect(ctx, "N", l.x + 1, l.y + 1, l.w - 2, l.h - 2);
+    const stillFor = st.key === "still" && S.rescue ? clock(S.rescue.facts.seconds_in_state) : "-";
+    const br = breathing();
+    const rows = [["PERSON", st.person, st.person === "YES" ? "l" : "W"], ["MOVING", st.moving, st.moving === "YES" ? "O" : "W"],
+      ["STILL", stillFor, "W"], ["BREATH", br.rate ? `~${Math.round(br.rate)}` : br.text, br.col]];
+    rows.forEach(([k, v, c], i) => {
+      const ry = l.y + 5 + i * 10, room = l.w - 10 - textWidth(k);
+      if (textWidth(v) > room) v = v.split(" ")[0];
+      text(ctx, k, l.x + 4, ry, "L");
+      text(ctx, v, l.x + l.w - 4 - textWidth(v), ry, c);
+    });
+    // signal bars: how much the Wi-Fi is wobbling right now (motion vs the freeze line)
+    const m = S.online ? Math.min((S.sense.motion || 0) / 4, 1) : 0, bars = 6;
+    const by = l.y + 50;
+    text(ctx, "SIGNAL", l.x + 4, by, "L");
+    for (let k = 0; k < bars; k++) {
+      const bh = 2 + k, on = k < Math.round(m * bars) + (S.online ? 1 : 0);
+      rect(ctx, on ? (k < 2 ? "l" : k < 4 ? "Y" : "O") : "D", l.x + l.w - 4 - (bars - k) * 4, by + 7 - bh, 3, bh);
+    }
+    if (S.sense && S.sense.simulated) text(ctx, "DEMO DATA", l.x + 4, by + 12, "Y");
+    const py = l.y + l.h - 22;
+    rect(ctx, "K", l.x + 3, py, l.w - 6, 19); rect(ctx, st.panel, l.x + 4, py + 1, l.w - 8, 17);
+    const flash = st.priority === "1" && (reduce || step % 4 < 2);           // red lamp for priority 1
+    rect(ctx, "K", l.x + 7, py + 6, 7, 7); rect(ctx, flash ? "Y" : "K", l.x + 8, py + 7, 5, 5);
+    text(ctx, "PRIORITY", l.x + 17, py + 6, "W", { shadow: "K" });
+    text(ctx, st.priority, l.x + l.w - 11 - textWidth(st.priority, true), py + 6, "W", { bold: true, shadow: "K" });
+    // a couple of chunky buttons under the plate, for the toy feel
+    for (const [bx, c] of [[x + w - 46, "R"], [x + w - 32, "B"], [x + w - 18, "g"]]) {
+      ellipse(ctx, "K", bx, y + 14, 4, 4); ellipse(ctx, c, bx, y + 14, 3, 3); rect(ctx, "W", bx - 1, y + 12, 1, 1);
+    }
+  }
+
+  // ------------------------------------------------------------- the gator, logo, back button
   let since = 0, lastKey = "";
   let backBtn = null, hoverBack = false;
   const clock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
   function drawUI(t, st) {
     if (st.key !== lastKey) { lastKey = st.key; since = t; }
-    // hanging wooden sign with the room's status
-    // centred in the free space between the back button (left) and the field notes (right)
-    const freeL = 84, freeR = W - 124, sw = Math.max(100, Math.min(170, freeR - freeL - 8));
-    const sx = Math.floor(freeL + (freeR - freeL - sw) / 2);
-    const drop = [-8, -4, -1, 1, 0][Math.min(4, Math.floor((t - since) / 70))];
-    const sy = 7 + drop;
-    for (const rx of [sx + 9, sx + sw - 10]) for (let y = 0; y < sy; y++) rect(ctx, y % 2 ? "Y" : "d", rx, y, 1, 1);
-    rect(ctx, "K", sx, sy, sw, 30); rect(ctx, "w", sx + 1, sy + 1, sw - 2, 28);
-    for (let i = 4; i < sw - 8; i += 11) rect(ctx, "d", sx + i, sy + 2, 6, 1);
-    text(ctx, "ROOM 1", sx + Math.floor((sw - textWidth("ROOM 1")) / 2), sy + 4, "Y");
-    rect(ctx, "K", sx + 4, sy + 13, sw - 8, 13); rect(ctx, st.panel, sx + 5, sy + 14, sw - 10, 11);
-    const bold = textWidth(st.sign, true) <= sw - 16;
-    text(ctx, st.sign, sx + Math.floor((sw - textWidth(st.sign, bold)) / 2), sy + 16, "W", { bold, shadow: "K" });
-
-    // field notes
-    const nw = 116, nx = W - nw - 4, ny = 4, nh = 92;
-    windowBox(ctx, nx, ny, nw, nh);
-    text(ctx, "FIELD NOTES", nx + 6, ny + 6, "Y");
-    const live = S.online && (reduce || Math.floor(t / 500) % 2);
-    rect(ctx, live ? "l" : "G", nx + nw - 9, ny + 6, 3, 3);
-    const stillFor = st.key === "still" && S.rescue ? clock(S.rescue.facts.seconds_in_state) : "-";
-    const rows = [["PERSON", st.person, st.person === "YES" ? "l" : "W"], ["MOVING", st.moving, st.moving === "YES" ? "O" : "W"],
-      ["STILL FOR", stillFor, "W"], ["BREATHING", breathing().text, breathing().col],
-      ["PRIORITY", st.priority, st.priority === "1" ? "R" : st.priority === "2" ? "O" : "W"]];
-    rows.forEach(([k, v, c], i) => {
-      const y = ny + 17 + i * 11, room = nw - 16 - textWidth(k);
-      if (textWidth(v) > room) v = v.replace(/^YES ~/, "~");          // "YES ~16/MIN" -> "~16/MIN"
-      const bold = textWidth(v, true) <= room;                       // bold when it fits, else regular
-      text(ctx, k, nx + 6, y, "L");
-      text(ctx, v, nx + nw - 6 - textWidth(v, bold), y, c, { bold });
-    });
-    if (S.sense && S.sense.simulated) text(ctx, "DEMO DATA", nx + 6, ny + nh - 11, "Y");
-
-    // the gator, in a fire helmet, says what it sees
     const dx = 4, dh = 35, dy = H - dh - 3, dw = W - 8;
     windowBox(ctx, dx, dy, dw, dh);
     rect(ctx, "K", dx + 5, dy + 5, 22, 22); rect(ctx, "R", dx + 6, dy + 6, 20, 20);
@@ -253,7 +246,6 @@
     let shown = Math.floor((t - since) / (reduce ? 1 : 28));
     lines.forEach((ln, i) => { text(ctx, ln.slice(0, Math.max(0, shown)), dx + 31, dy + 14 + i * 9, "W"); shown -= ln.length; });
 
-    // logo + back to the swamp game
     text(ctx, "WIFIND", 5, 5, "Y", { outline: "K", shadow: "R" });
     const label = "SWAMP GAME", bw = textWidth(label) + 18;
     windowBox(ctx, 4, 16, bw, 15, hoverBack ? "T" : "D");
@@ -271,7 +263,8 @@
   let lastSpoken = "";
   function frame(t) {
     const st = status();
-    drawWorld(t, st);
+    drawWorld(t);
+    drawScanner(t, st);
     drawUI(t, st);
     const spoken = `Room 1: ${st.sign}. ${st.say}`;   // the same news for screen readers
     if (spoken !== lastSpoken) { document.getElementById("live").textContent = spoken; lastSpoken = spoken; }
