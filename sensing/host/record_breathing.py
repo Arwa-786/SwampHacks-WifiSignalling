@@ -31,7 +31,10 @@ def say(text: str, rate: int = 200) -> None:
     subprocess.Popen(["say", "-r", str(rate), text])
 
 
-def schedule(rates: list[int], natural_min: float = 0.0) -> list[tuple[float, float, str]]:
+HOLD_S, AFTER_HOLD_S = 18, 12  # a breath-hold most people can do, then time to recover
+
+
+def schedule(rates: list[int], natural_min: float = 0.0, holds: int = 0) -> list[tuple[float, float, str]]:
     """(start, end, label) for every segment, in seconds from the start.
     natural_min > 0: one long "breathe normally" segment instead of paced ones
     (the true rate then comes from a phone on the belly, phone_truth.py)."""
@@ -48,6 +51,11 @@ def schedule(rates: list[int], natural_min: float = 0.0) -> list[tuple[float, fl
         t += BREATH_S
         plan.append((t, t + REST_S, "rest"))
         t += REST_S
+    for _ in range(holds):  # still AND not breathing: tells breathing apart from just "someone is still"
+        plan.append((t, t + HOLD_S, "hold"))
+        t += HOLD_S
+        plan.append((t, t + AFTER_HOLD_S, "breath_after_hold"))
+        t += AFTER_HOLD_S
     plan.append((t, t + END_EMPTY_S, "empty_end"))
     return plan
 
@@ -60,6 +68,7 @@ def main() -> None:
                         help="breaths per minute to pace (12-36: what the Wi-Fi rate can measure)")
     parser.add_argument("--person", default="unknown")
     parser.add_argument("--position", default="unknown")
+    parser.add_argument("--holds", type=int, default=0, help="breath-holds of 18 s at the end (still, not breathing)")
     parser.add_argument("--natural", type=float, default=0.0, metavar="MINUTES",
                         help="breathe normally for this long instead of paced (wear the phone: phone_truth.py)")
     args = parser.parse_args()
@@ -69,7 +78,7 @@ def main() -> None:
     ports = args.ports or find_rx_ports()
     if not ports:
         raise SystemExit("No RX boards streaming CSI. Is the WiFind server still running? Stop it first.")
-    plan = schedule(args.rates, args.natural)
+    plan = schedule(args.rates, args.natural, args.holds)
     clock = time.time() - time.monotonic()  # lines are stamped with uptime; this maps them to clock time
     total = plan[-1][1]
     print(f"Recording {len(ports)} receiver(s) for {total / 60:.1f} min: {ports}")
@@ -112,6 +121,10 @@ def main() -> None:
                     + ("Just breathe normally." if args.natural else "Breathe with my voice."))
             elif seg == "breath_natural":
                 say("Breathe normally until I call you.")
+            elif seg == "hold":
+                say("Breathe in, and hold your breath. Stay still.")
+            elif seg == "breath_after_hold":
+                say("Breathe normally. Stay still.")
             elif seg == "rest":
                 say("Rest. Breathe normally, stay still.")
             else:
@@ -140,7 +153,7 @@ def main() -> None:
         out = args.output if len(ports) == 1 else f"{base}_rx{mac.replace(':', '')[-4:] or os.path.basename(port)}{ext}"
         with open(out, "w") as f:
             f.write(f"# record_breathing {time.strftime('%Y-%m-%d %H:%M:%S')} rates={args.rates} "
-                    f"natural={args.natural} clock={clock:.3f} port={port} "
+                    f"natural={args.natural} holds={args.holds} clock={clock:.3f} port={port} "
                     f"mac={mac} person={args.person.replace(' ', '_')} position={args.position.replace(' ', '_')}\n")
             f.write("\n".join(rows[port]) + "\n")
         print(f"saved {len(rows[port])} lines to {out}")

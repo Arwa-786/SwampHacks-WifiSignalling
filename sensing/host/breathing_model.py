@@ -46,6 +46,8 @@ CLASSES = ["EMPTY", "BREATHING"]
 def label_class(label: str) -> int | None:
     if label in ("empty", "empty_again", "empty_end"):
         return EMPTY
+    if label == "hold":
+        return None  # still but NOT breathing: kept out of training, used to test the model (eval)
     if label.startswith("breath_") or label in ("rest", "frozen", "still"):
         return BREATHING
     return None  # settle, moving, walking...: not used
