@@ -240,6 +240,15 @@ Also: Guardian "room memory" day strip (state_agg), and forks to re-score old ga
   (returns MP3, not WAV). Config lives in `server/.env` (VULTR_*).
 - Vultr has no model for CSI: breathing, presence, posture stay our own signal processing / models.
 
+## Curtain tests and the ML decision (2026-10-17)
+- Live voice-guided tests behind a curtain: the hider must be BETWEEN the TX and the 3 RX.
+  TX in front of the curtain -> moves not seen (2%). TX 50 cm behind the hider -> moves 100%
+  caught but freeze read as moving (too close to TX). Next: TX ~1-1.2 m behind the hider.
+- Force a room scan after moving any board (the auto-scan "spoiled scan" check can keep an old one).
+- **Decision: ML for everything** (move/freeze, presence, breathing, falls, zones): record
+  labelled data in the real booth layout with a spoken-script recorder, train, report held-out
+  numbers; rules only as a baseline.
+
 ## Experiments still to run (need the boards)
 - Paced breathing (`record_breathing.py`, then `eval_breathing.py`): true vs Wi-Fi rate + empty-room
   control. Breathing rate is signal processing (FFT); train a "breathing yes/no" model only if
