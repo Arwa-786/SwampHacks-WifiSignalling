@@ -135,19 +135,25 @@ local function buildGator(folder, z)
 	return gator, head
 end
 
----------------------------------------------------------------- arena
+---------------------------------------------------------------- swamp
 
-local CROWD = {
-	Color3.fromRGB(255, 99, 132), Color3.fromRGB(255, 205, 86), Color3.fromRGB(75, 192, 192),
-	Color3.fromRGB(54, 162, 235), Color3.fromRGB(153, 102, 255), Color3.fromRGB(255, 159, 64),
-	Color3.fromRGB(250, 250, 250),
-}
+-- the same palette as the web pages (Sweetie 16 + browns)
+local WOOD = Color3.fromRGB(139, 90, 60)
+local WOOD_DARK = Color3.fromRGB(92, 58, 40)
+local DECK = Color3.fromRGB(184, 132, 86) -- the boardwalk: lighter, so the track reads in dusk light
+local CREAM = Color3.fromRGB(255, 244, 214)
+local MOSS = Color3.fromRGB(106, 143, 63)
+local LEAF = Color3.fromRGB(56, 183, 100)
+local LEAF_DARK = Color3.fromRGB(30, 77, 43)
+local WATER = Color3.fromRGB(37, 113, 121)
 
+-- A wooden sign on two posts, text facing the given side.
 local function sign(parent, props, lines, bg, fg)
 	local face = props.Face or Enum.NormalId.Front
 	props.Face = nil -- not a Part property
 	local p = part(parent, props)
 	p.Color = bg
+	p.Material = Enum.Material.Wood
 	local gui = Instance.new("SurfaceGui")
 	gui.Face = face
 	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
@@ -156,83 +162,138 @@ local function sign(parent, props, lines, bg, fg)
 	local t = Instance.new("TextLabel")
 	t.Size = UDim2.fromScale(1, 1)
 	t.BackgroundTransparency = 1
-	t.Font = Enum.Font.GothamBlack
+	t.Font = Enum.Font.FredokaOne
 	t.TextScaled = true
 	t.TextColor3 = fg
+	t.TextStrokeTransparency = 0.4
 	t.Text = lines
 	t.Parent = gui
+	for _, dx in { -0.4, 0.4 } do -- posts under it
+		local off = p.CFrame:VectorToWorldSpace(Vector3.new(dx * p.Size.X, 0, 0))
+		if math.abs(p.Size.Z) > math.abs(p.Size.X) then
+			off = p.CFrame:VectorToWorldSpace(Vector3.new(0, 0, dx * p.Size.Z))
+		end
+		local bottom = p.Position.Y - p.Size.Y / 2
+		part(parent, { Name = "SignPost", Size = Vector3.new(0.8, bottom + 0.5, 0.8),
+			Position = Vector3.new(p.Position.X + off.X, (bottom + 0.5) / 2 - 0.5, p.Position.Z + off.Z), Color = WOOD_DARK,
+			Material = Enum.Material.Wood })
+	end
 	return p
 end
 
--- Stands full of (blocky) fans on both sides, banners, trees and lamps.
-local function buildArena(folder, w)
-	local arena = Instance.new("Folder")
-	arena.Name = "Arena"
-	local rng = Random.new(7) -- fixed seed: the same crowd every time
-	for _, side in { -1, 1 } do
-		for row = 1, 4 do
-			local x = side * (w / 2 + 2 + row * 5)
-			part(arena, { Name = "Stand", Size = Vector3.new(5, row * 3, 180), Position = Vector3.new(x, row * 1.5, 0),
-				Color = row % 2 == 0 and Color3.fromRGB(60, 64, 90) or Color3.fromRGB(78, 84, 116),
-				Material = Enum.Material.Concrete })
-			for zf = -82, 82, 5 do
-				if rng:NextNumber() < 0.75 then
-					local fan = part(arena, { Name = "Fan", Size = Vector3.new(1.6, 2.6, 1.6),
-						Position = Vector3.new(x, row * 3 + 1.3, zf + rng:NextNumber(-1, 1)),
-						Color = CROWD[rng:NextInteger(1, #CROWD)], Material = Enum.Material.SmoothPlastic })
-					part(arena, { Name = "FanHead", Shape = Enum.PartType.Ball, Size = Vector3.new(1.4, 1.4, 1.4),
-						Position = fan.Position + Vector3.new(0, 2, 0), Color = Color3.fromRGB(255, 214, 170),
-						Material = Enum.Material.SmoothPlastic })
-				end
-			end
-		end
-		-- banners above the top row, facing the field
-		local face = side < 0 and Enum.NormalId.Right or Enum.NormalId.Left
-		local bx = side * (w / 2 + 24)
-		sign(arena, { Name = "Banner", Size = Vector3.new(1, 8, 44), Position = Vector3.new(bx, 20, -40), Face = face },
-			"WiFind", Color3.fromRGB(16, 18, 28), Color3.fromRGB(0, 220, 255))
-		sign(arena, { Name = "Banner", Size = Vector3.new(1, 8, 44), Position = Vector3.new(bx, 20, 10), Face = face },
-			"Freeze when the Wi-Fi is watching", Color3.fromRGB(255, 59, 72), Color3.new(1, 1, 1))
-		sign(arena, { Name = "Banner", Size = Vector3.new(1, 8, 44), Position = Vector3.new(bx, 20, 60), Face = face },
-			"Sensed by ESP32 Wi-Fi", Color3.fromRGB(46, 230, 120), Color3.fromRGB(16, 18, 28))
-		for zl = -70, 70, 35 do -- warm lamp posts along the wall
-			part(arena, { Name = "LampPost", Size = Vector3.new(0.8, 14, 0.8), Position = Vector3.new(side * (w / 2 + 1), 7, zl),
-				Color = Color3.fromRGB(40, 44, 60), Material = Enum.Material.Metal })
-			local bulb = part(arena, { Name = "Bulb", Shape = Enum.PartType.Ball, Size = Vector3.new(2, 2, 2),
-				Position = Vector3.new(side * (w / 2 + 1), 14.5, zl), Color = Color3.fromRGB(255, 220, 160),
-				Material = Enum.Material.Neon })
-			local l = Instance.new("PointLight")
-			l.Range, l.Brightness, l.Color = 30, 1.2, Color3.fromRGB(255, 210, 150)
-			l.Parent = bulb
-		end
+-- A bald cypress: flared trunk, flat layered canopy, Spanish moss hanging down.
+local function cypress(parent, pos, h, rng)
+	part(parent, { Name = "TrunkBase", Shape = Enum.PartType.Cylinder, Size = Vector3.new(3, 5, 5),
+		CFrame = CFrame.new(pos + Vector3.new(0, 1.5, 0)) * CFrame.Angles(0, 0, math.rad(90)), Color = WOOD_DARK,
+		Material = Enum.Material.Wood })
+	part(parent, { Name = "Trunk", Shape = Enum.PartType.Cylinder, Size = Vector3.new(h, 2.2, 2.2),
+		CFrame = CFrame.new(pos + Vector3.new(0, h / 2, 0)) * CFrame.Angles(0, 0, math.rad(90)), Color = WOOD,
+		Material = Enum.Material.Wood })
+	for k = 0, 2 do -- flat canopy layers, widest at the bottom
+		local r = 13 - k * 3
+		part(parent, { Name = "Canopy", Shape = Enum.PartType.Cylinder, Size = Vector3.new(2.4, r, r),
+			CFrame = CFrame.new(pos + Vector3.new(rng:NextNumber(-1, 1), h - 1 + k * 2.4, rng:NextNumber(-1, 1)))
+				* CFrame.Angles(0, 0, math.rad(90)), Color = k % 2 == 0 and LEAF_DARK or LEAF, Material = Enum.Material.Grass })
 	end
-	-- trees behind the gator and around the lobby
-	for i, pos in { Vector3.new(-26, 0, -92), Vector3.new(-12, 0, -98), Vector3.new(12, 0, -98), Vector3.new(26, 0, -92),
-		Vector3.new(-40, 0, 100), Vector3.new(40, 0, 100), Vector3.new(-50, 0, -100), Vector3.new(50, 0, -100) } do
-		local h = 10 + (i % 3) * 3
-		part(arena, { Name = "Trunk", Shape = Enum.PartType.Cylinder, Size = Vector3.new(h, 2.4, 2.4),
-			CFrame = CFrame.new(pos + Vector3.new(0, h / 2, 0)) * CFrame.Angles(0, 0, math.rad(90)),
-			Color = Color3.fromRGB(110, 76, 50), Material = Enum.Material.Wood })
-		for j, r in { 9, 7, 5 } do
-			part(arena, { Name = "Leaves", Shape = Enum.PartType.Ball, Size = Vector3.new(r, r, r),
-				Position = pos + Vector3.new((j - 2) * 1.2, h + j * 2.2, 0), Color = Color3.fromRGB(60, 160 + j * 15, 80),
-				Material = Enum.Material.Grass })
-		end
+	for _ = 1, 6 do -- moss strands
+		local a = rng:NextNumber(0, math.pi * 2)
+		local len = rng:NextNumber(2.5, 5)
+		part(parent, { Name = "Moss", Size = Vector3.new(0.3, len, 0.3), CanCollide = false,
+			Position = pos + Vector3.new(math.cos(a) * 4.5, h - 1.5 - len / 2, math.sin(a) * 4.5), Color = MOSS,
+			Material = Enum.Material.Grass })
 	end
-	-- a grass ground around everything
-	part(arena, { Name = "Grass", Size = Vector3.new(260, 1, 260), Position = Vector3.new(0, -0.48, 0), -- top just above the Baseplate
-		Color = Color3.fromRGB(96, 168, 88), Material = Enum.Material.Grass })
-	arena.Parent = folder
 end
 
--- Golden-hour light, soft haze and glow: cheap, and makes everything read better.
+local function cattails(parent, pos, rng)
+	for _ = 1, 4 do
+		local h = rng:NextNumber(3, 5.5)
+		local p = pos + Vector3.new(rng:NextNumber(-1.2, 1.2), 0, rng:NextNumber(-1.2, 1.2))
+		part(parent, { Name = "Reed", Size = Vector3.new(0.2, h, 0.2), CanCollide = false, Position = p + Vector3.new(0, h / 2, 0),
+			Color = MOSS, Material = Enum.Material.Grass })
+		part(parent, { Name = "Cattail", Shape = Enum.PartType.Cylinder, Size = Vector3.new(1.2, 0.5, 0.5), CanCollide = false,
+			CFrame = CFrame.new(p + Vector3.new(0, h - 0.4, 0)) * CFrame.Angles(0, 0, math.rad(90)), Color = WOOD_DARK,
+			Material = Enum.Material.Fabric })
+	end
+end
+
+local function lantern(parent, pos)
+	part(parent, { Name = "LanternPost", Size = Vector3.new(0.8, 10, 0.8), Position = pos + Vector3.new(0, 5, 0), Color = WOOD_DARK,
+		Material = Enum.Material.Wood })
+	local glass = part(parent, { Name = "Lantern", Size = Vector3.new(1.4, 1.8, 1.4), Position = pos + Vector3.new(0, 10.5, 0),
+		Color = Color3.fromRGB(255, 205, 117), Material = Enum.Material.Neon })
+	local l = Instance.new("PointLight")
+	l.Range, l.Brightness, l.Color = 24, 1.4, Color3.fromRGB(255, 200, 130)
+	l.Parent = glass
+end
+
+-- Swamp water, cypress trees, lily pads, cattails, lanterns, fireflies, a camp
+-- by the lobby dock and wooden signs: the same world as the web pages.
+local function buildSwamp(folder, w)
+	local swamp = Instance.new("Folder")
+	swamp.Name = "Swamp"
+	local rng = Random.new(7) -- fixed seed: the same swamp every time
+	part(swamp, { Name = "Water", Size = Vector3.new(320, 1, 320), Position = Vector3.new(0, -0.9, 0), CanCollide = false,
+		Color = WATER, Material = Enum.Material.Glass, Transparency = 0.15, Reflectance = 0.15 })
+	for _, side in { -1, 1 } do
+		-- grassy banks a little way off the boardwalk, with trees on them
+		part(swamp, { Name = "Bank", Size = Vector3.new(40, 1.2, 220), Position = Vector3.new(side * (w / 2 + 38), -0.2, 0),
+			Color = Color3.fromRGB(56, 120, 60), Material = Enum.Material.Grass })
+		for z = -90, 90, 26 do
+			cypress(swamp, Vector3.new(side * (w / 2 + rng:NextNumber(22, 50)), 0, z + rng:NextNumber(-6, 6)), rng:NextNumber(16, 24), rng)
+		end
+		for z = -80, 80, 12 do -- cattails along the water's edge, lily pads on the water
+			cattails(swamp, Vector3.new(side * (w / 2 + rng:NextNumber(3, 14)), -0.4, z + rng:NextNumber(-4, 4)), rng)
+			local r = rng:NextNumber(3, 6)
+			part(swamp, { Name = "LilyPad", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.2, r, r), CanCollide = false,
+				CFrame = CFrame.new(side * (w / 2 + rng:NextNumber(4, 16)), -0.35, z + 6) * CFrame.Angles(0, 0, math.rad(90)),
+				Color = LEAF, Material = Enum.Material.Grass })
+		end
+		for z = -70, 70, 35 do
+			lantern(swamp, Vector3.new(side * (w / 2 + 1.5), 0, z))
+		end
+		-- wooden signs facing the boardwalk
+		local face = side < 0 and Enum.NormalId.Right or Enum.NormalId.Left
+		sign(swamp, { Name = "Sign", Size = Vector3.new(1, 6, 28), Position = Vector3.new(side * (w / 2 + 9), 7, side < 0 and -30 or 30),
+			Face = face }, side < 0 and "Freeze when the Wi-Fi is watching" or "Sensed by ESP32 Wi-Fi\nno cameras", WOOD, CREAM)
+	end
+	-- fireflies over the water
+	for _ = 1, 40 do
+		local fly = part(swamp, { Name = "Firefly", Shape = Enum.PartType.Ball, Size = Vector3.new(0.35, 0.35, 0.35), CanCollide = false,
+			Position = Vector3.new(rng:NextNumber(-90, 90), rng:NextNumber(2, 12), rng:NextNumber(-100, 100)),
+			Color = Color3.fromRGB(255, 240, 150), Material = Enum.Material.Neon })
+		local l = Instance.new("PointLight")
+		l.Range, l.Brightness, l.Color = 4, 0.8, Color3.fromRGB(255, 240, 150)
+		l.Parent = fly
+	end
+	-- the camp by the lobby: a tent and a real campfire
+	local camp = Vector3.new(-w / 2 - 14, 0.4, 88)
+	part(swamp, { Name = "Tent", Shape = Enum.PartType.Wedge, Size = Vector3.new(7, 6, 5),
+		CFrame = CFrame.new(camp + Vector3.new(-4, 3, 0)), Color = Color3.fromRGB(239, 125, 87), Material = Enum.Material.Fabric })
+	part(swamp, { Name = "Tent", Shape = Enum.PartType.Wedge, Size = Vector3.new(7, 6, 5),
+		CFrame = CFrame.new(camp + Vector3.new(-4, 3, -5)) * CFrame.Angles(0, math.pi, 0), Color = Color3.fromRGB(255, 205, 117),
+		Material = Enum.Material.Fabric })
+	local logs = part(swamp, { Name = "Campfire", Size = Vector3.new(3, 0.8, 3), Position = camp + Vector3.new(6, 0.4, -2),
+		Color = WOOD_DARK, Material = Enum.Material.Wood })
+	local fire = Instance.new("Fire")
+	fire.Size, fire.Heat = 5, 9
+	fire.Parent = logs
+	local smoke = Instance.new("Smoke")
+	smoke.Opacity, smoke.RiseVelocity, smoke.Size = 0.08, 3, 2
+	smoke.Parent = logs
+	local glow = Instance.new("PointLight")
+	glow.Range, glow.Brightness, glow.Color = 20, 2, Color3.fromRGB(255, 160, 80)
+	glow.Parent = logs
+	swamp.Parent = folder
+end
+
+-- Swamp dusk: low warm sun, a green-tinted haze, glow on lanterns and fireflies.
 function Course.lighting()
 	local Lighting = game:GetService("Lighting")
-	Lighting.ClockTime = 16.8
-	Lighting.Brightness = 2.6
+	Lighting.ClockTime = 17.6
+	Lighting.Brightness = 2.2
 	Lighting.EnvironmentDiffuseScale = 0.6
 	Lighting.EnvironmentSpecularScale = 0.6
-	Lighting.OutdoorAmbient = Color3.fromRGB(140, 130, 150)
+	Lighting.OutdoorAmbient = Color3.fromRGB(120, 130, 140)
 	local function ensure(className, props)
 		local e = Lighting:FindFirstChildOfClass(className) or Instance.new(className)
 		for k, v in props do
@@ -240,14 +301,15 @@ function Course.lighting()
 		end
 		e.Parent = Lighting
 	end
-	ensure("Atmosphere", { Density = 0.28, Haze = 1.2, Color = Color3.fromRGB(255, 220, 190), Glare = 0.4 })
-	ensure("BloomEffect", { Intensity = 0.6, Size = 30, Threshold = 1.6 })
-	ensure("SunRaysEffect", { Intensity = 0.08, Spread = 0.7 })
+	ensure("Atmosphere", { Density = 0.32, Haze = 1.6, Color = Color3.fromRGB(220, 230, 190), Decay = Color3.fromRGB(120, 140, 110),
+		Glare = 0.3 })
+	ensure("BloomEffect", { Intensity = 0.8, Size = 30, Threshold = 1.4 })
+	ensure("SunRaysEffect", { Intensity = 0.06, Spread = 0.7 })
 end
 
 local function buildTower(folder, x, z)
 	part(folder, { Name = "TowerPole", Size = Vector3.new(2, 34, 2), Position = Vector3.new(x, 17, z),
-		Color = Color3.fromRGB(40, 44, 60), Material = Enum.Material.Metal })
+		Color = WOOD_DARK, Material = Enum.Material.Wood })
 	local lamp = part(folder, { Name = "Lamp", Shape = Enum.PartType.Ball, Size = Vector3.new(7, 7, 7),
 		Position = Vector3.new(x, 37, z), Color = GREEN, Material = Enum.Material.Neon })
 	local light = Instance.new("PointLight")
@@ -269,16 +331,37 @@ function Course.build()
 	folder.Parent = workspace
 
 	local w = Course.WIDTH
+	-- the track: a wide wooden boardwalk over the swamp
 	part(folder, { Name = "Field", Size = Vector3.new(w, 1, 170), Position = Vector3.new(0, -0.45, 0), -- top 0.05 above the Baseplate (no flicker)
-		Color = Color3.fromRGB(226, 196, 140), Material = Enum.Material.Sand })
-	for _, side in { -1, 1 } do
-		part(folder, { Name = "Wall", Size = Vector3.new(2, 8, 190), Position = Vector3.new(side * (w / 2 + 1), 4, 5),
-			Color = Color3.fromRGB(235, 120, 160), Material = Enum.Material.SmoothPlastic })
+		Color = DECK, Material = Enum.Material.WoodPlanks })
+	for z = -84, 84, 4 do -- thin dark seams between the boards
+		part(folder, { Name = "Seam", Size = Vector3.new(w, 0.04, 0.35), Position = Vector3.new(0, 0.06, z), Color = WOOD_DARK,
+			Material = Enum.Material.Wood })
 	end
-	part(folder, { Name = "BackWall", Size = Vector3.new(w, 8, 2), Position = Vector3.new(0, 4, 96),
-		Color = Color3.fromRGB(235, 120, 160), Material = Enum.Material.SmoothPlastic })
+	for _, side in { -1, 1 } do
+		-- invisible walls keep players on the track; a low railing shows the edge
+		part(folder, { Name = "Wall", Size = Vector3.new(2, 12, 190), Position = Vector3.new(side * (w / 2 + 1), 6, 5),
+			Transparency = 1 })
+		part(folder, { Name = "Railing", Size = Vector3.new(0.6, 0.6, 180), Position = Vector3.new(side * (w / 2 + 0.3), 2.4, 0),
+			Color = WOOD_DARK, Material = Enum.Material.Wood })
+		for z = -88, 88, 8 do
+			part(folder, { Name = "RailPost", Size = Vector3.new(0.8, 3, 0.8), Position = Vector3.new(side * (w / 2 + 0.3), 1, z),
+				Color = WOOD_DARK, Material = Enum.Material.Wood })
+		end
+	end
+	part(folder, { Name = "BackWall", Size = Vector3.new(w, 12, 2), Position = Vector3.new(0, 6, 96), Transparency = 1 })
 	part(folder, { Name = "Lobby", Size = Vector3.new(w, 1, 20), Position = Vector3.new(0, -0.4, 86),
-		Color = Color3.fromRGB(70, 80, 110), Material = Enum.Material.SmoothPlastic })
+		Color = WOOD_DARK, Material = Enum.Material.WoodPlanks })
+	for _, b in workspace:GetChildren() do -- the template's grey Baseplate would show under the water
+		if b:IsA("BasePart") and b.Name == "Baseplate" then
+			b.Transparency = 1
+			for _, tex in b:GetDescendants() do
+				if tex:IsA("Texture") or tex:IsA("Decal") then
+					tex.Transparency = 1
+				end
+			end
+		end
+	end
 
 	local startLine = part(folder, { Name = "StartLine", Size = Vector3.new(w, 0.2, 2),
 		Position = Vector3.new(0, 0.1, Course.START_Z), Color = Color3.new(1, 1, 1), Material = Enum.Material.Neon })
@@ -286,21 +369,17 @@ function Course.build()
 	local finishLine = part(folder, { Name = "FinishLine", Size = Vector3.new(w, 0.2, 3),
 		Position = Vector3.new(0, 0.1, Course.FINISH_Z), Color = Color3.fromRGB(255, 214, 10), Material = Enum.Material.Neon })
 	label(finishLine, "FINISH", Color3.fromRGB(30, 30, 40))
-	-- lane stripes every 10 studs, plus the glowing Wi-Fi lane for the real player
-	for zs = Course.FINISH_Z + 5, Course.START_Z - 5, 20 do
-		part(folder, { Name = "Stripe", Size = Vector3.new(w, 0.06, 10), Position = Vector3.new(0, 0.03, zs),
-			Color = Color3.fromRGB(214, 182, 126), Material = Enum.Material.Sand })
-	end
+	-- the glowing Wi-Fi lane for the real player
 	part(folder, { Name = "WiFiLane", Size = Vector3.new(0.4, 0.08, Course.START_Z - Course.FINISH_Z),
-		Position = Vector3.new(-3, 0.05, (Course.START_Z + Course.FINISH_Z) / 2), Color = Color3.fromRGB(0, 220, 255),
+		Position = Vector3.new(-3, 0.1, (Course.START_Z + Course.FINISH_Z) / 2), Color = Color3.fromRGB(0, 220, 255),
 		Material = Enum.Material.Neon, Transparency = 0.3 })
 	part(folder, { Name = "WiFiLane", Size = Vector3.new(0.4, 0.08, Course.START_Z - Course.FINISH_Z),
-		Position = Vector3.new(3, 0.05, (Course.START_Z + Course.FINISH_Z) / 2), Color = Color3.fromRGB(0, 220, 255),
+		Position = Vector3.new(3, 0.1, (Course.START_Z + Course.FINISH_Z) / 2), Color = Color3.fromRGB(0, 220, 255),
 		Material = Enum.Material.Neon, Transparency = 0.3 })
 	sign(folder, { Name = "LobbySign", Size = Vector3.new(30, 7, 1), Position = Vector3.new(0, 9, 95) },
 		"WiFind · Red Light, Green Light\nthe real player is hidden; Wi-Fi decides if they moved",
-		Color3.fromRGB(16, 18, 28), Color3.new(1, 1, 1))
-	buildArena(folder, w)
+		WOOD, CREAM)
+	buildSwamp(folder, w)
 
 	-- Invisible gate keeps lobby players off the field during a round.
 	-- (A visible one fills the bottom of the camera view at the start line.)
@@ -320,7 +399,13 @@ function Course.build()
 	spawn.Duration = 0
 	spawn.Size = Vector3.new(12, 1, 8)
 	spawn.Position = Vector3.new(0, 0.5, 86)
-	spawn.Color = Color3.fromRGB(46, 230, 120)
+	spawn.Color = DECK -- a wooden dock pad, not the default green studs
+	spawn.Material = Enum.Material.WoodPlanks
+	for _, d in spawn:GetChildren() do
+		if d:IsA("Decal") then
+			d:Destroy()
+		end
+	end
 	spawn.Parent = folder
 
 	local gator, head = buildGator(folder, -78)
