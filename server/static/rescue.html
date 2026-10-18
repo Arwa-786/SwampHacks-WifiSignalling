@@ -1,194 +1,266 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WiFind · Rescue Watch</title>
+<!--
+  Fire rescue mode, drawn with the same pixel engine as the swamp game (pixel.js).
+  A cabin is burning in the swamp at night; the front wall is cut away so you can
+  see the room: the 3 Wi-Fi receivers on the left wall, the curtain, the hiding
+  spot and the transmitter lantern on the right wall.
+
+  Nothing about the person is drawn or invented: the only thing at the hiding
+  spot is the Wi-Fi "echo", driven by the live verdict (/api/sense):
+     nobody seen   no echo
+     still         slow, steady rings (someone there, not moving: priority 1)
+     moving        bright, jittery rings (priority 2)
+  The gator's line comes from /api/ai/rescue (the AI gator, or a fixed template).
+-->
 <style>
-html,body{margin:0;min-height:100%;background:#1a1c2c;color:#f4f4f4;font:14px monospace}main{min-height:100vh;display:grid;place-content:center}canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;max-width:100vw}nav{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;gap:20px}a{color:#ffcd75;padding:6px 10px;border:2px solid #566c86;background:#29366f;text-decoration:none}a:focus-visible{outline:3px solid #a7f070}.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
-</style></head><body><main>
-<nav aria-label="Main"><span>WiFind / Rescue Watch</span><a href="/">Back to swamp game ↗</a></nav>
-<canvas id="scene" width="480" height="300" aria-hidden="true"></canvas>
-<section class="sr" aria-label="Rescue observations"><h1>Rescue Watch / Room 1</h1>
-<p>Illustrated smoky cabin, not a measured floor plan. Smoke is not measured. One instrumented zone.</p>
-<div role="status" aria-live="polite"><h2 id="signal">Waiting for Wi-Fi</h2><dl><dt>Connection</dt><dd id="connection">Connecting</dd><dt>Presence estimate</dt><dd id="presence">Unknown</dd><dt>Motion estimate</dt><dd id="motion">Unknown</dd><dt>Breathing</dt><dd>Not measured live</dd></dl><div id="receivers"></div></div><p id="updated">No reading received.</p>
-<p>Experimental sensing. Motion and stillness estimates remain unreliable in this booth. A quiet signal does not establish an empty room. This demonstration does not establish whether a person is safe or needs rescue.</p></section>
-</main><script>
+  html, body { margin: 0; height: 100%; background: #1a1c2c; overflow: hidden; }
+  canvas { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    image-rendering: pixelated; image-rendering: crisp-edges; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .sr:focus { position: fixed; left: 8px; top: 8px; width: auto; height: auto; clip: auto; padding: 6px 10px;
+    background: #1a1c2c; color: #ffcd75; outline: 3px solid #a7f070; z-index: 2; }
+</style>
+</head>
+<body>
+<canvas id="screen" aria-hidden="true"></canvas>
+<a class="sr" href="/">Back to the swamp game</a>
+<div class="sr" id="live" aria-live="polite"></div>
+
+<script src="/static/pixel.js"></script>
+<script>
 (() => {
-'use strict';
-const el=id=>document.getElementById(id);
-const canvas=el('scene'),c=canvas.getContext('2d');
-let latest=null;
-  const P = {
-    K: "#1a1c2c", W: "#f4f4f4", L: "#94b0c2", G: "#566c86", D: "#333c57", N: "#29366f", B: "#3b5dc9",
-    S: "#41a6f6", C: "#73eff7", T: "#257179", g: "#38b764", l: "#a7f070", f: "#1e4d2b", m: "#6a8f3f",
-    Y: "#ffcd75", O: "#ef7d57", R: "#b13e53", P: "#5d275d", w: "#8b5a3c", d: "#5c3a28",
-  };
+  "use strict";
+  const { textWidth, text, wrap, sprite, PORTRAIT, rect, ellipse, ring, ditherPick, windowBox, get, fit } = Pixel;
+  const screen = document.getElementById("screen");
+  const ctx = screen.getContext("2d");
+  let W = 320, H = 180, SCALE = 4;
+  const resize = () => ({ W, H, SCALE } = fit(screen));
+  addEventListener("resize", resize);
+  resize();
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  const GLYPHS = {
-    A: "01110 10001 10001 11111 10001 10001 10001", B: "11110 10001 10001 11110 10001 10001 11110",
-    C: "01110 10001 10000 10000 10000 10001 01110", D: "11100 10010 10001 10001 10001 10010 11100",
-    E: "11111 10000 10000 11110 10000 10000 11111", F: "11111 10000 10000 11110 10000 10000 10000",
-    G: "01110 10001 10000 10111 10001 10001 01111", H: "10001 10001 10001 11111 10001 10001 10001",
-    I: "111 010 010 010 010 010 111", J: "00111 00010 00010 00010 00010 10010 01100",
-    K: "10001 10010 10100 11000 10100 10010 10001", L: "10000 10000 10000 10000 10000 10000 11111",
-    M: "10001 11011 10101 10101 10001 10001 10001", N: "10001 10001 11001 10101 10011 10001 10001",
-    O: "01110 10001 10001 10001 10001 10001 01110", P: "11110 10001 10001 11110 10000 10000 10000",
-    Q: "01110 10001 10001 10001 10101 10010 01101", R: "11110 10001 10001 11110 10100 10010 10001",
-    S: "01111 10000 10000 01110 00001 00001 11110", T: "11111 00100 00100 00100 00100 00100 00100",
-    U: "10001 10001 10001 10001 10001 10001 01110", V: "10001 10001 10001 10001 10001 01010 00100",
-    W: "10001 10001 10001 10101 10101 10101 01010", X: "10001 10001 01010 00100 01010 10001 10001",
-    Y: "10001 10001 10001 01010 00100 00100 00100", Z: "11111 00001 00010 00100 01000 10000 11111",
-    0: "01110 10001 10011 10101 11001 10001 01110", 1: "010 110 010 010 010 010 111",
-    2: "01110 10001 00001 00010 00100 01000 11111", 3: "11111 00010 00100 00010 00001 10001 01110",
-    4: "00010 00110 01010 10010 11111 00010 00010", 5: "11111 10000 11110 00001 00001 10001 01110",
-    6: "00110 01000 10000 11110 10001 10001 01110", 7: "11111 00001 00010 00100 01000 01000 01000",
-    8: "01110 10001 10001 01110 10001 10001 01110", 9: "01110 10001 10001 01111 00001 00010 01100",
-    "!": "1 1 1 1 1 0 1", "?": "01110 10001 00001 00010 00100 00000 00100", ".": "0 0 0 0 0 0 1",
-    ",": "00 00 00 00 00 01 10", "'": "1 1 0 0 0 0 0", '"': "101 101 000 000 000 000 000",
-    ":": "0 0 1 0 0 1 0", "-": "000 000 000 111 000 000 000", "/": "00001 00010 00010 00100 01000 01000 10000",
-    "(": "01 10 10 10 10 10 01", ")": "10 01 01 01 01 01 10", "+": "000 000 010 111 010 000 000",
-    "=": "000 000 111 000 111 000 000", "%": "11001 11010 00010 00100 01000 01011 10011", " ": "00 00 00 00 00 00 00",
-  };
-  const FONT = {};
-  for (const [ch, rows] of Object.entries(GLYPHS)) FONT[ch] = rows.split(" ").map((r) => [...r].map(Number));
-
-  // text arrives from the laptop/AI in any case and with any punctuation
-  const tidy = (s) => String(s).toUpperCase().replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/…/g, "...")
-    .replace(/[—–·]/g, "-").replace(/[^A-Z0-9!?.,'":\-/()+=% ]/g, "");
-
-  function textWidth(s, bold) {
-    let w = 0;
-    for (const ch of tidy(s)) w += (FONT[ch] || FONT["?"])[0].length + 1 + (bold ? 1 : 0);
-    return Math.max(0, w - 1);
-  }
-  // one line of text; opts: bold, outline (colour key), shadow (colour key)
-  function text(ctx, s, x, y, col, opts = {}) {
-    s = tidy(s); x = Math.floor(x); y = Math.floor(y);
-    const plot = (ox, oy, c) => {
-      ctx.fillStyle = P[c];
-      let cx = x + ox;
-      for (const ch of s) {
-        const g = FONT[ch] || FONT["?"];
-        for (let r = 0; r < 7; r++) for (let k = 0; k < g[r].length; k++) {
-          if (g[r][k]) ctx.fillRect(cx + k, y + oy + r, opts.bold ? 2 : 1, 1);
-        }
-        cx += g[0].length + 1 + (opts.bold ? 1 : 0);
-      }
-    };
-    if (opts.outline) for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]]) plot(ox, oy, opts.outline);
-    if (opts.shadow) plot(0, 1, opts.shadow);
-    plot(0, 0, col);
-  }
-  function wrap(s, maxW) {
-    const lines = [];
-    let line = "";
-    for (const word of tidy(s).split(" ")) {
-      const t = line ? line + " " + word : word;
-      if (textWidth(t) > maxW && line) { lines.push(line); line = word; } else line = t;
-    }
-    if (line) lines.push(line);
-    return lines;
-  }
-
-  const PORTRAIT = [ // the gator's face for the dialog box
-    "...KKKK....KKKK...",
-    "..KggggK..KggggK..",
+  // the gator, with a firefighter's helmet
+  const FIRE_GATOR = [
+    "....KKKKKKKKKK....",
+    "..KKRRRRRRRRRRKK..",
+    ".KRRRRRYYRRRRRRRK.",
+    "KKKKKKKKKKKKKKKKKK",
     "..KgWWKK..KgWWKK..",
     "..KgWKKK..KgWKKK..",
-    ".KggggggKKggggggK.",
-    "KgggllllggllllgggK",
-    "KggggggggggggggggK",
-    "KgggggggggggggKgKK",
-    "KggggggggggggggggK",
-    "KWKWKWKWKWKWKWKWKK",
-    "KRRRRRRRRRRRRRRRRK",
-    "KWKWKWKWKWKWKWKWKK",
-    "KggggggggggggggggK",
-    "KfffffffffffffffK.",
-    ".KKKKKKKKKKKKKKKK.",
+    ...PORTRAIT.slice(4),
   ];
+  const LANTERN = ["..KKK..", "..K.K..", ".KKKKK.", ".KYYYK.", ".KYWYK.", ".KYYYK.", ".KKKKK."];
+  const FLAME_BODY = ["..YOORRY...", "..YORRROY..", ".YORRRROY..", ".YORRPRROY.", "YORRPPPRROY", "YORRPPPRROY",
+    ".YORRRRROY.", "..YOOOOOY..", "...YYYYY..."];
+  const FLAME = [                               // 11 x 14, three flickering tips over one body
+    [".....Y.....", "....YY.....", "....YOY....", "...YOOY....", "...YOOOY..."],
+    ["......Y....", ".....YY....", "....YOY....", "....YOOY...", "...YOOOY..."],
+    ["....Y......", "....YY.....", "...YOY.....", "...YOOY....", "...YOOOY..."],
+  ].map((tip) => tip.concat(FLAME_BODY));
 
-function rect(col,x,y,w,h){c.fillStyle=P[col];c.fillRect(Math.floor(x),Math.floor(y),w,h);}
-function label(s,x,y,col='W'){text(c,s,x,y,col);}
-function lines(s,x,y,width,col='W'){wrap(s,width).forEach((line,i)=>label(line,x,y+i*10,col));}
-function panel(x,y,w,h){rect('K',x,y,w,h);rect('L',x+1,y+1,w-2,h-2);rect('W',x+2,y+2,w-4,1);rect('G',x+3,y+3,w-6,h-6);rect('N',x+5,y+5,w-10,h-10);}
-function sprite(rows,x,y){rows.forEach((row,dy)=>[...row].forEach((col,dx)=>{if(col!=='.')rect(col,x+dx,y+dy,1,1);}));}
-function tree(x,y){rect('K',x+12,y+14,7,90);rect('d',x+14,y+15,4,87);for(let i=0;i<3;i++){rect('K',x-i*4,y+i*10,37+i*8,7);rect('f',x+2-i*4,y+i*10,33+i*8,5);rect('g',x+3-i*4,y+i*10,22+i*5,1);}for(let i=0;i<5;i++)rect('m',x+i*7,y+28,1,8+(i%3)*3);}
-function draw(t){
-  const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const tick=reduced?0:Math.floor(t/500);
-  rect('K',0,0,480,300);rect('P',0,0,480,166);rect('R',0,92,480,74);
-  // Dithered dusk, cypress trees and swamp water share the game's palette.
-  for(let y=88;y<166;y+=3)for(let x=(y%2)*2;x<480;x+=5)if((x+y)%7<4)rect('O',x,y,1,1);
-  rect('Y',42,65,20,16);rect('P',36,62,20,10);
-  for(const x of [6,58,258,447])tree(x,70+(x%17));
-  rect('f',0,172,480,22);rect('g',0,191,480,3);rect('T',0,194,480,106);
-  for(let i=0;i<26;i++)rect('C',(i*43+tick*2)%480,201+(i*13)%90,4+i%5,1);
-  panel(8,7,72,22);label('WIFIND',19,14,'Y');
-  rect('K',144,6,191,31);rect('w',146,8,187,27);rect('d',149,11,181,21);
-  label('RESCUE WATCH',240-Math.round(textWidth('RESCUE WATCH')/2),13,'Y');
-  label('ROOM 1 / CURTAIN BOOTH',240-Math.round(textWidth('ROOM 1 / CURTAIN BOOTH')/2),23,'W');
-  // Cabin cutaway: an illustration, with no invented person or breathing animation.
-  rect('K',48,83,230,103);rect('d',52,87,222,95);
-  for(let y=89;y<180;y+=8){rect('w',53,y,220,5);rect('d',63+(y%19),y,10,1);}
-  for(let i=0;i<14;i++){const x=39+i*9;rect('K',x,82-i*3,250-i*18,4);rect(i%2?'w':'d',x+2,83-i*3,246-i*18,2);}
-  rect('K',69,102,189,73);rect('D',73,106,181,65);rect('w',73,166,181,6);
-  // A low bank of smoke inside the cabin, illustrative only.
-  for(let i=0;i<9;i++){const x=79+i*19+((tick+i)%3);rect(i%2?'G':'L',x,112+(i%3)*5,23,5);rect('G',x+5,119+(i%2)*4,17,3);}
-  // The real booth layout: receivers on the laptop wall, the curtain, the hiding
-  // spot (an X, no invented person), the transmitter behind it. Every Wi-Fi line
-  // from the transmitter to a receiver crosses the hiding spot.
-  const alive=Array.isArray(latest?.receiver_alive)?latest.receiver_alive:[];
-  const nodes=[[80,116],[80,134],[80,152]], tx=[236,130];
-  nodes.forEach(([x,y])=>{const n=Math.max(Math.abs(tx[0]-x),Math.abs(tx[1]-y));
-    for(let k=0;k<n;k+=5)rect('l',x+3+Math.round((tx[0]-x)*k/n),y+3+Math.round((tx[1]+3-y)*k/n),2,1);});
-  rect('P',118,108,16,60);for(let y=110;y<166;y+=7)rect('R',119,y,14,2);rect('K',116,106,20,2);
-  label('CURTAIN',106,97,'W');
-  rect('K',176,131,9,9);for(let k=0;k<7;k++){rect('Y',177+k,132+k,1,1);rect('Y',183-k,132+k,1,1);}
-  label('HIDING SPOT',150,146,'Y');
-  nodes.forEach(([x,y],i)=>{rect('K',x-2,y-2,10,10);rect(alive[i]?'S':'G',x,y,6,6);label('RX'+(i+1),x+10,y-1,alive[i]?'C':'L');});
-  rect('K',tx[0],tx[1],12,16);rect('Y',tx[0]+3,tx[1]+3,6,9);rect('W',tx[0]+5,tx[1]+5,2,4);label('TX',tx[0]+1,tx[1]-10,'Y');
-  rect('K',49,182,230,6);rect('w',51,183,226,3);for(const x of [61,127,258]){rect('K',x,188,5,21);rect('d',x+1,188,3,20);}
-  label('ILLUSTRATED SCENE - NO SMOKE SENSOR',44,214,'Y');
-  // Compact field-notes panel, matching the game HUD.
-  panel(302,42,170,178);label('FIELD NOTES',313,53,'Y');
-  const sim=latest?.simulated;
-  label(sim?'SIMULATED DATA':'SIGNAL OBSERVATIONS',313,66,sim?'Y':'C');
-  const entries=[['CONNECTION',el('connection').textContent],['PRESENCE ESTIMATE',el('presence').textContent],['MOTION ESTIMATE',el('motion').textContent],['BREATHING','NOT MEASURED LIVE']];
-  entries.forEach(([name,value],i)=>{const y=83+i*31;label(name,313,y,'L');lines(value,313,y+10,147,name==='BREATHING'?'Y':'W');});
-  // Gator guide and prototype qualifier remain visible in the scene.
-  panel(8,229,464,51);rect('K',15,236,35,35);
-  c.save();c.translate(16,238);c.scale(2,2);sprite(PORTRAIT,0,0);c.restore();
-  label('GATOR / RESCUE GUIDE',58,239,'Y');
-  const message=sim?'PREVIEW ONLY. THESE SIGNALS ARE SIMULATED.':!latest||latest.state==='OFFLINE'?'NO SIGNAL. ROOM STATUS IS UNKNOWN.':'ONE HIDDEN SPACE. WATCH THE SIGNAL, THEN VERIFY.';
-  lines(message,58,251,398,'W');
-  label('PRELIMINARY ESTIMATES / BREATHING NOT CONNECTED',12,282,'Y');
-  label('QUIET SIGNAL DOES NOT PROVE AN EMPTY ROOM.',12,292,'L');
-  requestAnimationFrame(draw);
-}
-function resize(){const scale=Math.min(innerWidth/480,(innerHeight-55)/300);const crisp=scale>=1?Math.floor(scale):Math.max(.2,scale);canvas.style.width=480*crisp+'px';canvas.style.height=300*crisp+'px';}
-addEventListener('resize',resize);resize();
-  function render(s){
-    latest = s;
-    const states={MOVING:['Possible person present','Movement indicated'],STILL:['Possible person present','Stillness indicated'],EMPTY:['No presence indicated','No movement indicated']};
-    const alive=Array.isArray(s?.receiver_alive)?s.receiver_alive:[];
-    const connected=!!s && s.state!=='OFFLINE';
-    const ready=connected && s.calibrated && !s.calibrating && alive.length>0 && alive.every(Boolean) && !!states[s.state];
-    el('signal').textContent=ready?'Room 1 / Signal received':'Room 1 / Awaiting reliable signal';
-    el('connection').textContent=!connected?'Offline':s.simulated?'Simulated data':!alive.length?'Receiver health unavailable':!alive.every(Boolean)?'Receiver signal interrupted':s.calibrating?'Scanning empty room':!s.calibrated?'Room scan needed':'Live receivers connected';
-    el('connection').className=ready&&!s.simulated?'good':'';
-    el('presence').textContent=ready?states[s.state][0]:'Unknown';
-    el('motion').textContent=ready?states[s.state][1]:'Unknown';
-    el('receivers').replaceChildren();
-    alive.forEach((ok,i)=>{const tag=document.createElement('span');tag.className='rx';tag.textContent=`RX ${i+1} / ${s.simulated?'simulated':ok?'streaming':'no signal'}`;el('receivers').append(tag);});
-    if(!alive.length)el('receivers').textContent='Receiver status unavailable';
-    el('updated').textContent=connected?`Last response: ${new Date().toLocaleTimeString()}${s.simulated?' · simulated observations':''}`:'No current reading. Previous estimates cleared.';
+  // ------------------------------------------------------------- what we know
+  const S = { sense: null, rescue: null, online: false };
+  async function pollSense() { S.sense = await get("/api/sense"); S.online = !!S.sense && S.sense.state !== "OFFLINE"; }
+  async function pollRescue() { const r = await get("/api/ai/rescue?room=Room%201"); if (r) S.rescue = r; }
+
+  // the room's status, in one place: what the sign, the echo and the notes show
+  function status() {
+    if (!S.online) return { key: "offline", sign: "NO SIGNAL", panel: "N", person: "?", moving: "?", priority: "-",
+      say: "NO SIGNAL FROM THE BOOTH. WE CAN'T SEE INSIDE ROOM 1 RIGHT NOW." };
+    const st = S.sense.state;
+    if (st === "SCANNING" || st === "UNCALIBRATED") return { key: "scan", sign: "SCANNING ROOM", panel: "B",
+      person: "?", moving: "?", priority: "-", say: "LEARNING WHAT THE EMPTY ROOM LOOKS LIKE. STAND CLEAR." };
+    const line = S.rescue && S.rescue.line;
+    if (st === "MOVING") return { key: "moving", sign: "PERSON, MOVING", panel: "O", person: "YES", moving: "YES",
+      priority: "2", say: line || "ROOM 1: SOMEONE IS INSIDE AND MOVING. PRIORITY 2." };
+    if (st === "STILL") return { key: "still", sign: "PERSON, NOT MOVING", panel: "R", person: "YES", moving: "NO",
+      priority: "1", say: line || "ROOM 1: SOMEONE IS INSIDE AND NOT MOVING. PRIORITY 1." };
+    return { key: "empty", sign: "NOBODY SEEN", panel: "G", person: "NOT SEEN", moving: "-", priority: "-",
+      say: "ROOM 1: THE WI-FI DOESN'T SEE ANYONE. CHECK IT ANYWAY." };
   }
-  async function poll(){
-    const ctl=new AbortController();const timer=setTimeout(()=>ctl.abort(),2000);
-    try{const r=await fetch('/api/sense',{cache:'no-store',signal:ctl.signal});render(r.ok?await r.json():null);}
-    catch{render(null);}finally{clearTimeout(timer);setTimeout(poll,1000);}
+
+  // ------------------------------------------------------------- the night swamp + burning cabin
+  function drawWorld(t, st) {
+    const step = reduce ? 0 : Math.floor(t / 125);
+    const groundY = H - 42;
+    // sky: night, glowing orange near the fire (dithered, never a smooth gradient)
+    for (let y = 0; y < groundY; y++) for (let x = 0; x < W; x++) {
+      const tt = (y / groundY - 0.35) / 0.5;
+      ctx.fillStyle = Pixel.P[tt <= 0 ? "K" : tt >= 1 ? "P" : (ditherPick(x, y, tt) ? "P" : "N")];
+      ctx.fillRect(x, y, 1, 1);
+    }
+    for (let i = 0; i < W / 5; i++) rect(ctx, "W", (i * 97) % W, (i * 53) % Math.floor(groundY * 0.4), 1, 1); // stars
+    ellipse(ctx, "W", W - 30, 22, 6, 6); rect(ctx, "L", W - 33, 20, 2, 2); // moon
+    // far treeline
+    for (let x = 0; x < W; x += 14) { ellipse(ctx, "D", x + 7, groundY - 18 - ((x * 7) % 9), 8, 8); rect(ctx, "D", x, groundY - 18, 16, 18); }
+    // swamp water
+    rect(ctx, "N", 0, groundY, W, H - groundY); rect(ctx, "T", 0, groundY, W, 1);
+    for (let i = 0; i < W / 9; i++) rect(ctx, "G", ((i * 37) + Math.floor(step / 3)) % W, groundY + 3 + (i * 7) % 30, 3 + i % 4, 1);
+
+    // the cabin on stilts, front wall cut away
+    const cw = Math.min(210, W - 140), ch = Math.min(80, groundY - 76);
+    const x0 = Math.max(6, Math.floor((W - 120 - cw) / 2)), x1 = x0 + cw;
+    const floorY = groundY - 10, ceilY = floorY - ch;
+    for (const sx of [x0 + 8, x0 + cw / 2, x1 - 10]) { rect(ctx, "K", sx - 1, floorY, 5, 14); rect(ctx, "d", sx, floorY, 3, 13); }
+    // fire glow on the water under the cabin
+    for (let x = x0; x < x1; x += 2) if ((x + step) % 6 < 3) rect(ctx, "O", x, groundY + 2 + (x % 5), 1, 1);
+    rect(ctx, "K", x0 - 2, ceilY - 2, cw + 4, ch + 6);
+    for (let y = ceilY; y < floorY; y++) rect(ctx, (y - ceilY) % 6 < 5 ? "w" : "d", x0, y, cw, 1); // back wall planks
+    for (let y = ceilY + 2; y < floorY; y += 6) for (let x = x0 + ((y * 7) % 11); x < x1; x += 23) rect(ctx, "d", x, y, 6, 1);
+    rect(ctx, "d", x0, floorY - 3, cw, 3); rect(ctx, "K", x0, floorY, cw, 2);   // floor
+    // a back window showing flames outside
+    const wx = x0 + Math.floor(cw * 0.45), wy = ceilY + 10;
+    rect(ctx, "K", wx - 1, wy - 1, 18, 14); rect(ctx, (step % 2) ? "O" : "R", wx, wy, 16, 12);
+    sprite(ctx, FLAME[step % 3], wx + 3, wy - 2);                   // fire seen through the back window
+    rect(ctx, "K", wx + 7, wy, 1, 12); rect(ctx, "K", wx, wy + 6, 16, 1);
+    // roof: a gable, sloping 1 pixel up for every 3 in
+    const rl = x0 - 8, rr = x1 + 8, rows = Math.floor((rr - rl) / 6);
+    for (let r = 0; r < rows; r++) {
+      const y = ceilY - 3 - r;
+      rect(ctx, "K", rl + r * 3 - 1, y, rr - rl - r * 6 + 2, 1);
+      rect(ctx, (r >> 1) % 2 ? "d" : "w", rl + r * 3 + 1, y, rr - rl - r * 6 - 2, 1);
+    }
+    rect(ctx, "K", rl - 1, ceilY - 2, rr - rl + 2, 2);
+    const roofY = (x) => ceilY - 3 - Math.floor(Math.min(x - rl, rr - x) / 3);
+    // flames on the roof and out of the window, embers rising, smoke drifting
+    for (const [fx, k] of [[x1 - 58, 0], [x1 - 40, 1], [x1 - 24, 2]]) sprite(ctx, FLAME[(step + k) % 3], fx, roofY(fx + 5) - 12);
+    for (let i = 0; i < 18; i++) {
+      const life = ((step * 2 + i * 17) % 60) / 60, ex = x1 - 56 + ((i * 13) % 44);
+      rect(ctx, life < 0.5 ? "Y" : "O", ex + Math.round(Math.sin(life * 6 + i) * 3), roofY(ex) - 14 - Math.round(life * 50), 1, 1);
+    }
+    for (let i = 0; i < 7; i++) {
+      const life = ((step + i * 9) % 64) / 64;
+      const px = x1 - 34 - Math.round(life * 60) + i * 3, py = roofY(x1 - 34) - 18 - Math.round(life * 45);
+      for (let y = -3; y <= 3; y++) for (let x = -6; x <= 6; x++) if (x * x / 36 + y * y / 9 <= 1 && ditherPick(px + x, py + y, 0.6 - life * 0.4))
+        rect(ctx, life < 0.5 ? "G" : "D", px + x, py + y, 1, 1);
+    }
+    // smoke filling the top of the room (it's why a camera can't see)
+    for (let y = ceilY; y < ceilY + Math.floor(ch * 0.45); y++) for (let x = x0; x < x1; x++) {
+      const dens = 0.75 - (y - ceilY) / (ch * 0.6);
+      if (ditherPick(x + Math.floor(step / 2), y, dens)) rect(ctx, (y + x) % 3 ? "G" : "L", x, y, 1, 1);
+    }
+
+    // inside: receivers on the left wall, curtain, hiding spot, lantern on the right wall
+    const rxs = [0.3, 0.5, 0.7].map((f) => [x0 + 4, Math.round(ceilY + ch * f)]);
+    const tx = [x1 - 14, Math.round(ceilY + ch * 0.45)];
+    const curtainX = x0 + Math.floor(cw * 0.28);
+    const hide = [x0 + Math.floor(cw * 0.62), floorY - 16];
+    const lit = st.key === "still" || st.key === "moving";
+    for (const [rx, ry] of rxs) {           // Wi-Fi lines: they cross the hiding spot
+      const n = Math.max(Math.abs(tx[0] - rx), Math.abs(tx[1] - ry));
+      for (let k = 0; k < n; k += 4) rect(ctx, lit ? "l" : "L", rx + 5 + Math.round((tx[0] - rx) * k / n), ry + 2 + Math.round((tx[1] + 3 - ry) * k / n), 2, 1);
+    }
+    for (const [rx, ry] of rxs) { rect(ctx, "K", rx - 1, ry - 1, 8, 7); rect(ctx, "S", rx, ry, 6, 5); rect(ctx, "C", rx + 1, ry + 1, 2, 1); }
+    rect(ctx, "K", curtainX - 2, ceilY + 2, 18, 2);
+    for (let y = ceilY + 4; y < floorY - 3; y++) for (let x = 0; x < 14; x++)
+      rect(ctx, x % 4 === 0 ? "R" : "P", curtainX + x + ((y >> 3) % 2 && x % 4 === 0 ? 1 : 0), y, 1, 1);
+    for (let k = 0; k < 9; k++) {                                  // tape X on the floor
+      rect(ctx, "Y", hide[0] - 5 + k, floorY - 12 + k, 2, 1); rect(ctx, "Y", hide[0] + 3 - k, floorY - 12 + k, 2, 1);
+    }
+    sprite(ctx, LANTERN, tx[0], tx[1]);
+    if (!reduce && (step % 8) < 4) ring(ctx, "Y", tx[0] + 3, tx[1] + 3, 6 + (step % 4) * 2, 2);
+
+    // the Wi-Fi echo at the hiding spot: the only thing drawn about the person
+    if (st.key === "still") {
+      const r = 3 + ((reduce ? 0 : step) % 12);
+      ring(ctx, "C", hide[0], hide[1], r, r > 9 ? 3 : 1);
+      ring(ctx, "C", hide[0], hide[1], Math.max(2, r - 6), 1);
+      ellipse(ctx, "C", hide[0], hide[1], 1, 1);
+    } else if (st.key === "moving") {
+      for (let k = 0; k < 3; k++) {
+        const r = 4 + ((step * 2 + k * 5) % 15);
+        ring(ctx, k % 2 ? "Y" : "O", hide[0] + (reduce ? 0 : ((step + k) % 3) - 1), hide[1] + (reduce ? 0 : (step % 2)), r, r > 12 ? 3 : 1);
+      }
+      ellipse(ctx, "Y", hide[0], hide[1], 2, 2);
+    }
+    // labels under the cabin
+    text(ctx, "RX", rxs[2][0] - 1, floorY + 4, "C");
+    text(ctx, "TX", tx[0] + 1, floorY + 4, "Y");
+    text(ctx, "HIDING SPOT", hide[0] - Math.floor(textWidth("HIDING SPOT") / 2), floorY + 4, "Y");
   }
-  poll();
-requestAnimationFrame(draw);
+
+  // ------------------------------------------------------------- UI: sign, notes, dialog, back button
+  let since = 0, lastKey = "";
+  let backBtn = null, hoverBack = false;
+  const clock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+  function drawUI(t, st) {
+    if (st.key !== lastKey) { lastKey = st.key; since = t; }
+    // hanging wooden sign with the room's status
+    // centred in the free space between the back button (left) and the field notes (right)
+    const freeL = 84, freeR = W - 124, sw = Math.max(100, Math.min(170, freeR - freeL - 8));
+    const sx = Math.floor(freeL + (freeR - freeL - sw) / 2);
+    const drop = [-8, -4, -1, 1, 0][Math.min(4, Math.floor((t - since) / 70))];
+    const sy = 7 + drop;
+    for (const rx of [sx + 9, sx + sw - 10]) for (let y = 0; y < sy; y++) rect(ctx, y % 2 ? "Y" : "d", rx, y, 1, 1);
+    rect(ctx, "K", sx, sy, sw, 30); rect(ctx, "w", sx + 1, sy + 1, sw - 2, 28);
+    for (let i = 4; i < sw - 8; i += 11) rect(ctx, "d", sx + i, sy + 2, 6, 1);
+    text(ctx, "ROOM 1", sx + Math.floor((sw - textWidth("ROOM 1")) / 2), sy + 4, "Y");
+    rect(ctx, "K", sx + 4, sy + 13, sw - 8, 13); rect(ctx, st.panel, sx + 5, sy + 14, sw - 10, 11);
+    const bold = textWidth(st.sign, true) <= sw - 16;
+    text(ctx, st.sign, sx + Math.floor((sw - textWidth(st.sign, bold)) / 2), sy + 16, "W", { bold, shadow: "K" });
+
+    // field notes
+    const nw = 116, nx = W - nw - 4, ny = 4, nh = 92;
+    windowBox(ctx, nx, ny, nw, nh);
+    text(ctx, "FIELD NOTES", nx + 6, ny + 6, "Y");
+    const live = S.online && (reduce || Math.floor(t / 500) % 2);
+    rect(ctx, live ? "l" : "G", nx + nw - 9, ny + 6, 3, 3);
+    const stillFor = st.key === "still" && S.rescue ? clock(S.rescue.facts.seconds_in_state) : "-";
+    const rows = [["PERSON", st.person, st.person === "YES" ? "l" : "W"], ["MOVING", st.moving, st.moving === "YES" ? "O" : "W"],
+      ["STILL FOR", stillFor, "W"], ["BREATHING", "NOT YET", "L"],
+      ["PRIORITY", st.priority, st.priority === "1" ? "R" : st.priority === "2" ? "O" : "W"]];
+    rows.forEach(([k, v, c], i) => {
+      const y = ny + 17 + i * 11;
+      text(ctx, k, nx + 6, y, "L");
+      text(ctx, v, nx + nw - 6 - textWidth(v, true), y, c, { bold: true });
+    });
+    if (S.sense && S.sense.simulated) text(ctx, "DEMO DATA", nx + 6, ny + nh - 11, "Y");
+
+    // the gator, in a fire helmet, says what it sees
+    const dx = 4, dh = 35, dy = H - dh - 3, dw = W - 8;
+    windowBox(ctx, dx, dy, dw, dh);
+    rect(ctx, "K", dx + 5, dy + 5, 22, 22); rect(ctx, "R", dx + 6, dy + 6, 20, 20);
+    sprite(ctx, FIRE_GATOR, dx + 7, dy + 7);
+    text(ctx, "GATOR, RESCUE CREW", dx + 31, dy + 5, "Y");
+    text(ctx, "PROTOTYPE", dx + dw - 7 - textWidth("PROTOTYPE"), dy + 5, "L");
+    const lines = wrap(st.say, dw - 40).slice(0, 2);
+    let shown = Math.floor((t - since) / (reduce ? 1 : 28));
+    lines.forEach((ln, i) => { text(ctx, ln.slice(0, Math.max(0, shown)), dx + 31, dy + 14 + i * 9, "W"); shown -= ln.length; });
+
+    // logo + back to the swamp game
+    text(ctx, "WIFIND", 5, 5, "Y", { outline: "K", shadow: "R" });
+    const label = "SWAMP GAME", bw = textWidth(label) + 18;
+    windowBox(ctx, 4, 16, bw, 15, hoverBack ? "T" : "D");
+    const k = Math.floor(t / 400) % 2;
+    rect(ctx, "Y", 10 - k, 21, 1, 5); rect(ctx, "Y", 9 - k, 22, 1, 3); rect(ctx, "Y", 8 - k, 23, 1, 1);
+    text(ctx, label, 14, 20, "Y");
+    backBtn = { x: 4, y: 16, w: bw, h: 15 };
+  }
+
+  const toGame = (e) => { const r = screen.getBoundingClientRect(); return [(e.clientX - r.left) / SCALE, (e.clientY - r.top) / SCALE]; };
+  const onBack = ([x, y]) => backBtn && x >= backBtn.x && x < backBtn.x + backBtn.w && y >= backBtn.y && y < backBtn.y + backBtn.h;
+  screen.addEventListener("click", (e) => { if (onBack(toGame(e))) location.href = "/"; });
+  screen.addEventListener("mousemove", (e) => { hoverBack = onBack(toGame(e)); screen.style.cursor = hoverBack ? "pointer" : ""; });
+
+  let lastSpoken = "";
+  function frame(t) {
+    const st = status();
+    drawWorld(t, st);
+    drawUI(t, st);
+    const spoken = `Room 1: ${st.sign}. ${st.say}`;   // the same news for screen readers
+    if (spoken !== lastSpoken) { document.getElementById("live").textContent = spoken; lastSpoken = spoken; }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  pollSense(); pollRescue();
+  setInterval(pollSense, 500);
+  setInterval(pollRescue, 2000);
 })();
-</script></body></html>
+</script>
+</body>
+</html>

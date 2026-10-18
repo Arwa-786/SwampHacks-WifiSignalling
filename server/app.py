@@ -39,6 +39,7 @@ import numpy as np
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -208,6 +209,8 @@ def create_app(multi, store: Store | None = None, speak: bool = False, auto_scan
             time.sleep(TICK_S)
 
     threading.Thread(target=loop, daemon=True).start()
+
+    app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")), name="static")  # pixel.js etc.
 
     @app.get("/")
     def index():

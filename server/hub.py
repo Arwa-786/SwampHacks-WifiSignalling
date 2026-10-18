@@ -35,6 +35,7 @@ import time
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STALE_S = 1.5  # no verdict from the laptop for this long -> OFFLINE
@@ -91,6 +92,8 @@ def create_hub(token: str | None = None) -> FastAPI:
     def health():
         return {"edge": edge["ws"] is not None, "verdict_age_s": round(time.time() - edge["sense_t"], 2)
                 if edge["sense_t"] else None, "connected_since": edge["connected_t"] or None}
+
+    app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")), name="static")  # pixel.js etc.
 
     @app.get("/")
     def index():
