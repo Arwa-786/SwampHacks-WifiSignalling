@@ -55,6 +55,16 @@ end
 local gui = new("ScreenGui", { Name = "WiFindHud", ResetOnSpawn = false, IgnoreGuiInset = true },
 	Players.LocalPlayer:WaitForChild("PlayerGui"))
 
+-- Everything is laid out for a ~1100x760 screen and scaled down on smaller
+-- ones (phones, a small Studio window), so panels never collide.
+local uiScale = new("UIScale", {}, gui)
+local function fitScreen()
+	local vp = workspace.CurrentCamera.ViewportSize
+	uiScale.Scale = math.clamp(math.min(vp.X / 1100, vp.Y / 760), 0.5, 1)
+end
+workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(fitScreen)
+fitScreen()
+
 -- red flash over the whole screen when the light turns red
 local flash = new("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = RED, BackgroundTransparency = 1,
 	BorderSizePixel = 0, ZIndex = 0 }, gui)
