@@ -62,7 +62,7 @@ def main() -> None:
     for name, files in group_boards(args.recordings):
         boards = [load_session(f) for f in files]
         for label, start, end in segments(boards[0].labels, boards[0].times):
-            if not (label.startswith("breath_") or label == "empty"):
+            if not (label.startswith("breath_") or label in ("empty", "empty_end")):
                 continue
             ests = []
             t = start + SKIP_S
@@ -73,7 +73,7 @@ def main() -> None:
                 t += STEP_S
             if not ests:
                 continue
-            if label == "empty":
+            if label in ("empty", "empty_end"):
                 empty_conf += [e.confidence for e in ests]
                 continue
             true = int(label.split("_")[1])

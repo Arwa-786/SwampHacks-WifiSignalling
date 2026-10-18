@@ -253,6 +253,9 @@ Also: Guardian "room memory" day strip (state_agg), and forks to re-score old ga
   vary pose/person) -> `python train_model.py --fuse data/booth_*_rx*.log --out models/wifind_booth.json`
   -> `python evaluate.py data/booth_*_rx*.log --out data/booth_report.md` -> run the server with
   `--model ../sensing/host/models/wifind_booth.json`.
+- Breathing ML: `python train_breathing.py data/breath_*_rx*.log data/booth_*_rx*.log --out models/breathing.json`
+  (model = breathing person vs empty room; rate = FFT, shown only when the model says breathing).
+  Webcam sessions can't train it (labels flip too often for 15 s windows). Not yet wired into the server.
 
 ## Experiments still to run (need the boards)
 - Paced breathing (`record_breathing.py`, then `eval_breathing.py`): true vs Wi-Fi rate + empty-room

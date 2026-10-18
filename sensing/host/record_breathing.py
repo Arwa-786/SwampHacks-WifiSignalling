@@ -4,11 +4,12 @@
 
 No breathing sensor needed: the laptop says "in" / "out" at a fixed pace and
 you breathe along, so each segment's true rate is exactly the pace. Script:
-    30 s  empty room (step away)      label "empty"   -> what "no breathing" looks like
+    45 s  empty room (step away)      label "empty"   -> what "no breathing" looks like
     10 s  get in place, sit still     label "settle"  (not scored)
     then for each --rates (default 10, 15, 20 breaths/min):
     50 s  breathe with the voice      label "breath_<rate>"
     10 s  rest, breathe normally      label "rest"    (not scored)
+    then 30 s empty room again        label "empty_end" (more "no breathing" for the model)
 All RX boards are recorded at once, one log per board (<output>_rx<mac>.log),
 in the same format as record_labeled.py. Then: python eval_breathing.py data/breath_*_rx*.log
 """
@@ -23,7 +24,7 @@ import time
 
 from csi_io import iter_lines
 
-EMPTY_S, SETTLE_S, BREATH_S, REST_S = 30, 10, 50, 10
+EMPTY_S, SETTLE_S, BREATH_S, REST_S, END_EMPTY_S = 45, 10, 50, 10, 30
 
 
 def say(text: str, rate: int = 200) -> None:
@@ -41,6 +42,7 @@ def schedule(rates: list[int]) -> list[tuple[float, float, str]]:
         t += BREATH_S
         plan.append((t, t + REST_S, "rest"))
         t += REST_S
+    plan.append((t, t + END_EMPTY_S, "empty_end"))
     return plan
 
 
@@ -92,7 +94,9 @@ def main() -> None:
             label["now"] = seg
             print(f"{seg_start:5.0f}s  {seg}", flush=True)
             if seg == "empty":
-                say("Step away from the boards for thirty seconds.")
+                say("Step away from the boards for forty five seconds.")
+            elif seg == "empty_end":
+                say("Now step away from the boards again for thirty seconds.")
             elif seg == "settle":
                 say("Come back, sit still in your spot, and breathe with my voice.")
             elif seg == "rest":

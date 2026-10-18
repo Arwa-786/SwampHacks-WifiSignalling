@@ -29,5 +29,5 @@ def test_segments_split_on_label_changes():
 
 def test_breathing_script_covers_every_rate_in_order():
     plan = schedule([10, 20])
-    assert [lab for _, _, lab in plan] == ["empty", "settle", "breath_10", "rest", "breath_20", "rest"]
+    assert [lab for _, _, lab in plan] == ["empty", "settle", "breath_10", "rest", "breath_20", "rest", "empty_end"]
     assert all(a[1] == b[0] for a, b in zip(plan, plan[1:]))  # no gaps
