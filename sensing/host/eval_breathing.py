@@ -24,7 +24,8 @@ from features import load_session
 from signal_processing import BREATHING_BAND, RateEstimate, estimate_rate
 from train_model import group_boards
 
-WINDOW_S = 30.0
+WINDOW_S = 40.0  # Gu et al. 2019 (arXiv 1908.05108): "40 s of data is enough"; on our first
+# session 40 s also beat 30 s for the board that tracks breathing (RX2: 0.9 vs 2.5 /min off at 10/min)
 STEP_S = 5.0
 SKIP_S = 5.0  # the start of a segment: the person is still syncing with the voice
 
@@ -83,7 +84,7 @@ def main() -> None:
                          float(np.mean(np.abs(rates - true) <= 2)), float(np.mean(conf >= MIN_CONFIDENCE))))
 
     lines = ["# WiFind breathing evaluation", "",
-             "True rate = the pace the laptop voice set. Wi-Fi only; 30 s windows every 5 s.", "",
+             "True rate = the pace the laptop voice set. Wi-Fi only; 40 s windows every 5 s.", "",
              "| Session | true / min | Wi-Fi median / min | median error | within ±2 / min | breathing detected |",
              "|---|---|---|---|---|---|"]
     for sess, true, med, err, within, det in rows:

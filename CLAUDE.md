@@ -189,6 +189,14 @@ MIT Wi-Vi (2013), WiTrack (2014), Vital-Radio (2015), RF-Pose (2018); UW WiSee (
 CMU Person-in-WiFi (2019), DensePose from WiFi (2022); IEEE 802.11bf Wi-Fi sensing standard;
 Espressif ESP-CSI; Wi-Fi fall-detection literature (see Awesome-WiFi-CSI-Sensing).
 Note: the big results used special radios / multi-antenna routers, not ESP32s.
+Gu, Zhang, Liu, Ren 2019, "WiFi-based Real-time Breathing and Heart Rate Monitoring during Sleep"
+(arXiv 1908.05108): Intel 5300, 1 TX + 3 RX antennas, 500 pkt/s, people lying still; max-variance
+subcarrier, Hampel filter, Butterworth 0.25-0.5 Hz (breath) / 1-2 Hz (heart), FFT on ~40 s;
+0.58 /min breathing, 3.9 /min heart error. Lessons: the clearest direct link is the LEAST sensitive,
+the best stream changes per setup, a metal sheet under the TX boosted sensitivity, ground truth =
+accelerometer on the belly (we can use a phone app). On our first session their filter recipe was not a
+clear win; 40 s windows were. One board (RX2) tracked 10/15/20 per min within ~2; no simple rule
+(wobble or confidence) picks it, so board choice should be learned from paced sessions.
 
 ## Notes from reviewing past projects
 - Permanence (github.com/billpquach/permanence) "memory" = tracking with rules, not AI memory:
